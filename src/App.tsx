@@ -32,6 +32,7 @@ export default function App() {
   const [sshConnections, setSshConnections] = useState<SSHConnection[]>(DEFAULT_SSH_CONNECTIONS);
   const [activeSSHId, setActiveSSHId] = useState<string>('conn-prod-01');
   const [isSSHModalOpen, setIsSSHModalOpen] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // File Tree State
   const [fileTree, setFileTree] = useState<FileTreeNode[]>(INITIAL_FILE_TREE);
@@ -369,10 +370,12 @@ export default function App() {
         onToggleTail={() => setIsTailing(!isTailing)}
         onSignOut={() => setCurrentScreen('login')}
         user={currentUser}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
+        isMobileSidebarOpen={isMobileSidebarOpen}
       />
 
       {/* Main Workspace Body: Sidebar (File Tree + SSH) + Log Viewer Viewport */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar: File Tree & SSH Connection Manager */}
         <Sidebar
           fileTree={fileTree}
@@ -380,10 +383,12 @@ export default function App() {
           onSelectTreeNode={handleSelectTreeNode}
           activeConnection={activeConnection}
           onOpenSSHModal={() => setIsSSHModalOpen(true)}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* Central Log Viewer Area */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#070b12]">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#070b12] min-w-0">
           {/* Top Filter & Grep Toolbar */}
           <LogViewerToolbar
             currentFile={currentFile}
@@ -451,13 +456,13 @@ export default function App() {
       </div>
 
       {/* Quick Screen Switcher Badge in bottom left */}
-      <div className="fixed bottom-9 left-2 z-40">
+      <div className="fixed bottom-8 sm:bottom-9 left-2 z-30">
         <button
           onClick={() => setCurrentScreen('login')}
-          className="px-2 py-1 rounded bg-[#0e1624]/90 hover:bg-[#162338] border border-[#1e2e44] text-[10px] font-mono text-slate-400 hover:text-cyan-300 shadow-lg cursor-pointer transition-colors backdrop-blur-sm"
+          className="px-2 py-0.5 sm:py-1 rounded bg-[#0e1624]/90 hover:bg-[#162338] border border-[#1e2e44] text-[9.5px] sm:text-[10px] font-mono text-slate-400 hover:text-cyan-300 shadow-lg cursor-pointer transition-colors backdrop-blur-sm"
           title="Switch to LogPulse Login Screen"
         >
-          ← Switch to Login Screen
+          ← Login Screen
         </button>
       </div>
 

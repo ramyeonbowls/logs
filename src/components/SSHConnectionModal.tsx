@@ -100,34 +100,35 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-[#0b1019] border border-[#1e2d44] w-full max-w-xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none">
+      <div className="bg-[#0b1019] border border-[#1e2d44] w-full max-w-xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Modal Header */}
-        <div className="h-12 bg-[#0e1624] border-b border-[#1b273b] px-4 flex items-center justify-between">
+        <div className="h-12 bg-[#0e1624] border-b border-[#1b273b] px-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Server className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold text-white">
+            <h3 className="text-xs sm:text-sm font-semibold text-white truncate">
               SSH Connection &amp; Remote Folder Mount
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-slate-400 hover:text-white cursor-pointer transition-colors"
+            className="p-1.5 rounded text-slate-400 hover:text-white cursor-pointer transition-colors"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 overflow-y-auto space-y-4 text-xs font-sans">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs font-sans">
           
           {/* Preset Profiles Tabs */}
           <div>
             <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
               Configured Remote SSH Hosts
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {connections.map((conn) => {
                 const isSelected = conn.id === selectedPresetId;
                 return (
@@ -158,8 +159,8 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
           <form id="ssh-form" onSubmit={handleConnectAndMount} className="space-y-3.5">
             
             {/* Host and Port */}
-            <div className="grid grid-cols-4 gap-2.5">
-              <div className="col-span-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+              <div className="sm:col-span-3">
                 <label className="text-slate-300 font-medium block mb-1 text-[11.5px]">
                   Remote Server Host / IP Address
                 </label>
@@ -194,7 +195,7 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
             </div>
 
             {/* Username and Remote Folder Path */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="text-slate-300 font-medium block mb-1 text-[11.5px]">
                   SSH Username
@@ -241,7 +242,7 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
                 SSH Authentication Method
               </label>
 
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex flex-wrap items-center gap-4 text-xs">
                 <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                   <input
                     type="radio"
@@ -270,11 +271,11 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
                     Select Stored Key / Identity File:
                   </label>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded bg-[#070b12] border border-[#1b2639] text-slate-200 font-mono text-xs">
-                      <Key className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>~/.ssh/{keyName}</span>
+                    <div className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded bg-[#070b12] border border-[#1b2639] text-slate-200 font-mono text-xs truncate">
+                      <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span className="truncate">~/.ssh/{keyName}</span>
                     </div>
-                    <span className="text-[10px] text-emerald-400 font-mono px-2 py-1 bg-emerald-950/40 border border-emerald-800/40 rounded flex items-center gap-1">
+                    <span className="text-[10px] text-emerald-400 font-mono px-2 py-1 bg-emerald-950/40 border border-emerald-800/40 rounded flex items-center gap-1 shrink-0">
                       <ShieldCheck className="w-3 h-3" />
                       Encrypted
                     </span>
@@ -320,18 +321,18 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="h-13 bg-[#0e1624] border-t border-[#1b273b] px-4 flex items-center justify-between">
+        <div className="bg-[#0e1624] border-t border-[#1b273b] px-4 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shrink-0">
           <button
             type="button"
             onClick={handleTestConnection}
             disabled={isTesting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#131e30] hover:bg-[#1a2942] border border-[#233550] text-slate-200 text-xs font-mono transition-colors cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-[#131e30] hover:bg-[#1a2942] border border-[#233550] text-slate-200 text-xs font-mono transition-colors cursor-pointer disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isTesting ? 'animate-spin' : ''}`} />
-            <span>{isTesting ? 'Testing Handshake...' : 'Test SSH Handshake'}</span>
+            <span>{isTesting ? 'Testing...' : 'Test SSH Handshake'}</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="w-full sm:w-auto flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -342,10 +343,10 @@ export const SSHConnectionModal: React.FC<SSHConnectionModalProps> = ({
             <button
               type="submit"
               form="ssh-form"
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors cursor-pointer shadow-md shadow-cyan-600/30"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors cursor-pointer shadow-md shadow-cyan-600/30"
             >
               <Terminal className="w-3.5 h-3.5" />
-              <span>Connect &amp; Mount Folder</span>
+              <span>Connect</span>
             </button>
           </div>
         </div>

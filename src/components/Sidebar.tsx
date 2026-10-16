@@ -9,7 +9,8 @@ import {
   RefreshCw, 
   HardDrive,
   Settings2,
-  FolderTree
+  FolderTree,
+  X
 } from 'lucide-react';
 import { FileTreeNode, SSHConnection } from '../types/ssh';
 
@@ -19,6 +20,8 @@ interface SidebarProps {
   onSelectTreeNode: (node: FileTreeNode) => void;
   activeConnection: SSHConnection;
   onOpenSSHModal: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,6 +30,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTreeNode,
   activeConnection,
   onOpenSSHModal,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
   const [treeState, setTreeState] = useState<FileTreeNode[]>(fileTree);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -53,6 +58,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setTimeout(() => {
       setIsRefreshing(false);
     }, 600);
+  };
+
+  const handleFileClick = (node: FileTreeNode) => {
+    onSelectTreeNode(node);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
   };
 
   // Recursive renderer for file tree
@@ -105,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ) : (
             /* File Item */
             <div
-              onClick={() => onSelectTreeNode(node)}
+              onClick={() => handleFileClick(node)}
               style={{ paddingLeft: `${depth * 14 + 16}px` }}
               className={`flex items-center justify-between py-1.5 pr-2 my-0.5 rounded cursor-pointer transition-colors group ${
                 isSelected
@@ -134,9 +146,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  return (
-    <aside className="w-64 bg-[#090d15] border-r border-[#192233] flex flex-col justify-between select-none shrink-0 h-full text-xs">
-      
+  const sidebarContent = (
+    <div className="flex flex-col justify-between h-full select-none text-xs">
       {/* Top Section: SSH Remote Connection Panel */}
       <div className="p-2.5 border-b border-[#182335] bg-[#0c121d]">
         <div className="flex items-center justify-between mb-1.5">
@@ -153,14 +164,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={onOpenSSHModal}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#131d2e] hover:bg-[#1a2942] border border-[#233550] text-[10.5px] text-cyan-300 hover:text-cyan-200 transition-colors cursor-pointer"
-            title="Configure SSH Connection & Remote Folder"
-          >
-            <Settings2 className="w-3 h-3 text-cyan-400" />
-            <span>Config</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenSSHModal}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#131d2e] hover:bg-[#1a2942] border border-[#233550] text-[10.5px] text-cyan-300 hover:text-cyan-200 transition-colors cursor-pointer"
+              title="Configure SSH Connection & Remote Folder"
+            >
+              <Settings2 className="w-3 h-3 text-cyan-400" />
+              <span>Config</span>
+            </button>
+            {onCloseMobile && (
+              <button
+                onClick={onCloseMobile}
+                className="md:hidden p-1 rounded hover:bg-[#1a253a] text-slate-400 hover:text-white cursor-pointer ml-1"
+                aria-label="Close Sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Active SSH Connection Card */}
@@ -194,7 +216,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Middle Section: FILE TREE EXPLORER */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        
         {/* Tree Header */}
         <div className="px-3 py-2 border-b border-[#152030] flex items-center justify-between bg-[#080c14]">
           <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">
@@ -215,11 +236,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
           {renderTree(treeState)}
         </div>
-
       </div>
 
-      {/* Bottom Memory & SSH Buffer Widget (Maintains screenshot aesthetic) */}
-      <div className="p-2.5 border-t border-[#182233] bg-[#070a10]">
+      {/* Bottom Memory & SSH Buffer Widget */}
+      <div className="p-2.5 border-t border-[#182233] bg-[#070a10] shrink-0">
         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
           <span className="tracking-wider uppercase font-semibold text-slate-500 flex items-center gap-1">
             <HardDrive className="w-3 h-3 text-cyan-500" />
@@ -241,7 +261,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>{activeConnection.cipher.split('@')[0]}</span>
         </div>
       </div>
+    </div>
+  );
 
-    </aside>
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden md:flex w-64 lg:w-72 bg-[#090d15] border-r border-[#192233] shrink-0 h-full flex-col">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div 
+            onClick={onCloseMobile}
+            className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity"
+          />
+
+          {/* Slide-out Drawer Panel */}
+          <div className="relative w-[85%] max-w-[320px] bg-[#090d15] border-r border-[#1e2d42] h-full shadow-2xl flex flex-col z-50 animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

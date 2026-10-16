@@ -78,20 +78,19 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-[#070b12] overflow-hidden select-text font-mono">
-      {/* Sub-header info banner as seen in Image 3 */}
-      <div className="h-7 bg-[#0b1018] border-b border-[#141d2c] px-3 flex items-center justify-between text-[10.5px] text-slate-400 font-mono select-none shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-300 font-semibold">RAW LOG STREAM (AS-IS PLAIN TEXT)</span>
+      {/* Sub-header info banner with responsive labels */}
+      <div className="h-7 bg-[#0b1018] border-b border-[#141d2c] px-2.5 sm:px-3 flex items-center justify-between text-[10px] sm:text-[10.5px] text-slate-400 font-mono select-none shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+          <span className="text-slate-300 font-semibold hidden md:inline">RAW LOG STREAM (AS-IS PLAIN TEXT)</span>
+          <span className="text-slate-300 font-semibold md:hidden">RAW STREAM</span>
           <span className="text-slate-600">|</span>
-          <span className="text-slate-400">ANSI / Colorized Output</span>
-          <span className="text-slate-600">|</span>
-          <span className="text-slate-400">Tab Size: 2</span>
-          <span className="text-slate-600">|</span>
+          <span className="text-slate-400 hidden sm:inline">ANSI Output</span>
+          <span className="text-slate-600 hidden sm:inline">|</span>
           <span className="text-slate-400">Wrap: {isWrapText ? 'ON' : 'OFF'}</span>
           <span className="text-slate-600">|</span>
           <span className="text-cyan-400 font-medium">Line: {selectedLineNumber ?? lines[0]?.lineNumber ?? 1048}</span>
         </div>
-        <div className="text-[10px] text-slate-500 uppercase tracking-wider hidden sm:block">
+        <div className="text-[10px] text-slate-500 uppercase tracking-wider hidden lg:block">
           RAW STREAM ANSI UTF-8
         </div>
       </div>
@@ -99,7 +98,7 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
       {/* Terminal logs list container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto p-2 scroll-smooth"
+        className="flex-1 overflow-auto p-1.5 sm:p-2 scroll-smooth"
         style={{ fontSize: `${fontSize}px`, lineHeight: `${fontSize * 1.55}px` }}
       >
         <div className="min-w-fit">
@@ -118,8 +117,8 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                       : 'border border-transparent'
                   }`}
                 >
-                  {/* Line Number gutter */}
-                  <div className="w-14 shrink-0 text-right pr-4 text-slate-500 select-none group-hover:text-slate-300 font-mono">
+                  {/* Line Number gutter - compact on mobile */}
+                  <div className="w-10 sm:w-14 shrink-0 text-right pr-2 sm:pr-4 text-slate-500 select-none group-hover:text-slate-300 font-mono text-[11px] sm:text-[12px]">
                     {line.lineNumber}
                   </div>
 
@@ -158,7 +157,7 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                   </div>
                 </div>
 
-                {/* Stack Trace rendering (if present) */}
+                {/* Stack Trace rendering */}
                 {line.stackTrace && line.stackTrace.length > 0 && (
                   <div className="flex flex-col">
                     {line.stackTrace.map((stackLine, stackIdx) => {
@@ -176,14 +175,14 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                               : 'border border-transparent'
                           }`}
                         >
-                          <div className="w-14 shrink-0 text-right pr-4 text-slate-600 select-none group-hover:text-slate-400 font-mono">
+                          <div className="w-10 sm:w-14 shrink-0 text-right pr-2 sm:pr-4 text-slate-600 select-none group-hover:text-slate-400 font-mono text-[11px] sm:text-[12px]">
                             {stackLineNumber}
                           </div>
                           <div
                             className={`flex-1 font-mono tracking-tight ${
                               stackIdx === 0
                                 ? 'text-rose-300 font-medium'
-                                : 'text-slate-400 pl-4'
+                                : 'text-slate-400 pl-3 sm:pl-4'
                             } ${isWrapText ? 'break-words' : 'whitespace-pre'}`}
                           >
                             {highlightSearch(stackLine)}

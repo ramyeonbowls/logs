@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PulseLogo } from './PulseLogo';
-import { User, Key, Eye, EyeOff, ArrowRight, CornerDownLeft, Terminal, ShieldAlert } from 'lucide-react';
+import { User, Key, Eye, EyeOff, ArrowRight, Terminal, ShieldAlert } from 'lucide-react';
 
 interface LoginScreenProps {
   onSignIn: (user: { name: string; email: string; role: string }) => void;
@@ -35,7 +35,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
   };
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center justify-center bg-[#070b12] p-4 select-none overflow-hidden font-sans">
+    <div className="relative min-h-screen w-full flex flex-col items-center justify-center bg-[#070b12] p-3 sm:p-4 select-none overflow-y-auto font-sans">
       {/* Background ambient lighting vignette */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111c2e]/60 via-[#070b12] to-[#04060a] pointer-events-none" />
 
@@ -49,7 +49,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
       />
 
       {/* Authentication Card */}
-      <div className="relative w-full max-w-[430px] rounded-xl bg-[#0e1622]/95 border border-slate-800/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.85)] p-7 md:p-8 backdrop-blur-xl z-10">
+      <div className="relative w-full max-w-[430px] rounded-xl bg-[#0e1622]/95 border border-slate-800/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.85)] p-5 sm:p-7 md:p-8 backdrop-blur-xl z-10 my-4">
         
         {/* Subtle top edge cyan rim glow */}
         <div className="absolute top-0 left-12 right-12 h-[1.5px] bg-gradient-to-r from-transparent via-[#38bdf8]/70 to-transparent" />
@@ -65,25 +65,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
           </div>
 
           {/* Heading */}
-          <h1 className="mt-3 text-[22px] font-bold text-white tracking-tight">
+          <h1 className="mt-3 text-xl sm:text-[22px] font-bold text-white tracking-tight">
             LogPulse Observability
           </h1>
 
           {/* Subtitle */}
-          <p className="mt-1.5 text-[12.5px] text-slate-400 max-w-[340px] leading-relaxed">
+          <p className="mt-1.5 text-xs sm:text-[12.5px] text-slate-400 max-w-[340px] leading-relaxed">
             Sign in to monitor production systems, audit trails, and microservices in real-time.
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-5 sm:mt-6 space-y-4">
           {/* Username or Email */}
           <div>
             <div className="flex items-center justify-between text-xs mb-1.5">
-              <label htmlFor="login-username" className="text-slate-300 font-medium text-[12.5px]">
+              <label htmlFor="login-username" className="text-slate-300 font-medium text-[12px] sm:text-[12.5px]">
                 Username or Email
               </label>
-              <span className="text-slate-500 text-[11px]">required</span>
+              <span className="text-slate-500 text-[10.5px] sm:text-[11px]">required</span>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -96,7 +96,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="username or email"
                 required
-                className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
+                className="w-full pl-10 pr-3 py-2 sm:py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[12.5px] sm:text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
               />
             </div>
           </div>
@@ -104,13 +104,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
           {/* Password */}
           <div>
             <div className="flex items-center justify-between text-xs mb-1.5">
-              <label htmlFor="login-password" className="text-slate-300 font-medium text-[12.5px]">
+              <label htmlFor="login-password" className="text-slate-300 font-medium text-[12px] sm:text-[12.5px]">
                 Password
               </label>
               <button
                 type="button"
                 onClick={() => setShowForgotNotice(true)}
-                className="text-cyan-400 hover:text-cyan-300 text-[11.5px] transition-colors focus:outline-none"
+                className="text-cyan-400 hover:text-cyan-300 text-[11px] sm:text-[11.5px] transition-colors focus:outline-none"
               >
                 Forgot password?
               </button>
@@ -126,7 +126,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
                 required
-                className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
+                className="w-full pl-10 pr-10 py-2 sm:py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[12.5px] sm:text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
               />
               <button
                 type="button"
@@ -141,7 +141,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
 
           {/* Keep signed in */}
           <div className="flex items-center justify-between pt-0.5">
-            <label className="flex items-center gap-2 cursor-pointer select-none text-slate-400 hover:text-slate-300 text-[12.5px]">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-slate-400 hover:text-slate-300 text-[12px] sm:text-[12.5px]">
               <input
                 type="checkbox"
                 checked={keepSignedIn}
@@ -157,11 +157,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-[#20a4f3] hover:bg-[#1b93dc] text-white font-medium text-[13.5px] shadow-[0_4px_16px_rgba(32,164,243,0.3)] transition-all active:scale-[0.99] disabled:opacity-70 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-[#20a4f3] hover:bg-[#1b93dc] text-white font-medium text-[13px] sm:text-[13.5px] shadow-[0_4px_16px_rgba(32,164,243,0.3)] transition-all active:scale-[0.99] disabled:opacity-70 cursor-pointer"
             >
               <span>{isLoading ? 'Authenticating...' : 'Sign In to Workspace'}</span>
               <ArrowRight className="w-4 h-4 ml-0.5" />
-              <kbd className="ml-1 px-1.5 py-0.5 bg-[#177ab7]/80 rounded text-[10px] font-mono leading-none border border-cyan-300/30">
+              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 bg-[#177ab7]/80 rounded text-[10px] font-mono leading-none border border-cyan-300/30">
                 ↵
               </kbd>
             </button>
@@ -169,11 +169,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
         </form>
 
         {/* Demo Fast Account Selector */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col gap-2">
-          <span className="text-[11px] text-slate-500 uppercase tracking-wider text-center">
+        <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-800/80 flex flex-col gap-2">
+          <span className="text-[10.5px] sm:text-[11px] text-slate-500 uppercase tracking-wider text-center">
             Instant Demo Sign-In
           </span>
-          <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11.5px]">
             <button
               type="button"
               onClick={() => handleQuickFill('julian.putra99@gmail.com')}
@@ -220,7 +220,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
       )}
 
       {/* Footer copyright */}
-      <footer className="mt-8 text-center text-slate-600 text-xs font-mono">
+      <footer className="mt-4 sm:mt-8 text-center text-slate-600 text-[11px] sm:text-xs font-mono">
         LogPulse Enterprise Observability · Encrypted Session v4.28
       </footer>
     </div>
