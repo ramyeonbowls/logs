@@ -1,0 +1,6 @@
+{
+  "name": "LogPulse Observability",
+  "description": "Real-time production systems observability, raw log file viewer, and microservices telemetry stream.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
