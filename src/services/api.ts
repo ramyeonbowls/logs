@@ -276,6 +276,8 @@ export class LogPulseAPI {
   // 5. Query Logs API
   static async getLogs(params: {
     fileId?: string;
+    filePath?: string;
+    path?: string;
     search?: string;
     level?: string;
     caseSensitive?: boolean;
@@ -284,6 +286,7 @@ export class LogPulseAPI {
     try {
       const query = new URLSearchParams();
       if (params.fileId) query.set('fileId', params.fileId);
+      if (params.filePath || params.path) query.set('path', params.filePath || params.path || '');
       if (params.search) query.set('search', params.search);
       if (params.level) query.set('level', params.level);
       if (params.caseSensitive) query.set('caseSensitive', 'true');

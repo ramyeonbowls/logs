@@ -234,14 +234,15 @@ export default function App() {
     if (node.type !== 'file') return;
 
     // Check if backend has logs for this file
-    if (node.fileId) {
+    if (node.fileId || node.path) {
       try {
-        const backendLog = await LogPulseAPI.getLogs({ fileId: node.fileId });
+        const backendLog = await LogPulseAPI.getLogs({ fileId: node.fileId, filePath: node.path });
         if (backendLog && backendLog.lines && backendLog.lines.length > 0) {
+          const targetId = node.fileId || node.id;
           setFiles(prev => {
-            const exists = prev.find(f => f.id === node.fileId);
+            const exists = prev.find(f => f.id === targetId || f.path === node.path);
             if (exists) {
-              return prev.map(f => f.id === node.fileId ? {
+              return prev.map(f => (f.id === targetId || f.path === node.path) ? {
                 ...f,
                 lines: backendLog.lines,
                 lineCount: backendLog.totalLines,
@@ -262,7 +263,7 @@ export default function App() {
               return [newFile, ...prev];
             }
           });
-          setCurrentFileId(node.fileId);
+          setCurrentFileId(targetId);
           setSelectedLineNumber(backendLog.lines[0]?.lineNumber || 1);
           return;
         }
@@ -619,16 +620,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* Quick Screen Switcher Badge in bottom left */}
-      <div className="fixed bottom-8 sm:bottom-9 left-2 z-30">
-        <button
-          onClick={() => setCurrentScreen('login')}
-          className="px-2 py-0.5 sm:py-1 rounded bg-[#0e1624]/90 hover:bg-[#162338] border border-[#1e2e44] text-[9.5px] sm:text-[10px] font-mono text-slate-400 hover:text-cyan-300 shadow-lg cursor-pointer transition-colors backdrop-blur-sm"
-          title="Switch to LogPulse Login Screen"
-        >
-          ← Login Screen
-        </button>
-      </div>
 
       {/* Modals & Dialogs: Comprehensive Connection Config & SQLite Manager */}
       <ConnectionSettingsModal
