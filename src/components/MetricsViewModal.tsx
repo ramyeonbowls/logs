@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, BarChart2, TrendingUp, AlertTriangle, Cpu, Activity } from 'lucide-react';
 import { LogFile } from '../types/log';
+import { LogPulseAPI } from '../services/api';
 
 interface MetricsViewModalProps {
   isOpen: boolean;
@@ -13,6 +14,20 @@ export const MetricsViewModal: React.FC<MetricsViewModalProps> = ({
   onClose,
   currentFile,
 }) => {
+  const [metrics, setMetrics] = useState<{
+    ingestRateEPS: number;
+    errorRatio: number;
+    latencyMs: number;
+    memoryUsedMB: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      LogPulseAPI.getMetrics().then((data) => {
+        if (data) setMetrics(data);
+      });
+    }
+  }, [isOpen]);
   if (!isOpen) return null;
 
   return (

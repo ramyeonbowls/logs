@@ -4,6 +4,7 @@ export const DEFAULT_SSH_CONNECTIONS: SSHConnection[] = [
   {
     id: 'conn-prod-01',
     name: 'Production Node 01 (US-East)',
+    type: 'ssh',
     host: 'prod-k8s-node-01.us-east.internal',
     port: 22,
     username: 'deploy',
@@ -16,8 +17,21 @@ export const DEFAULT_SSH_CONNECTIONS: SSHConnection[] = [
     fingerprint: 'SHA256:d8Q8kZ...9aB12'
   },
   {
+    id: 'conn-local-sys',
+    name: 'Host Local System Logs (/var/log)',
+    type: 'local_folder',
+    localPath: '/var/log',
+    recursive: true,
+    fileFilter: '*.log',
+    isConnected: true,
+    latencyMs: 1,
+    cipher: 'posix-direct-io',
+    fingerprint: 'FS:POSIX:DIRECT_IO'
+  },
+  {
     id: 'conn-stage-02',
     name: 'Staging Cluster 02',
+    type: 'ssh',
     host: 'stage-cluster-02.internal',
     port: 22,
     username: 'ops-user',
@@ -31,15 +45,17 @@ export const DEFAULT_SSH_CONNECTIONS: SSHConnection[] = [
   },
   {
     id: 'conn-edge-eu',
-    name: 'Frankfurt Edge Ingress',
+    name: 'Frankfurt Edge Tunnel',
+    type: 'remote_tunnel',
     host: 'gw-fra-edge01.cloud.internal',
-    port: 2222,
+    port: 443,
     username: 'sre-admin',
-    authMethod: 'password',
+    authMethod: 'token',
+    tunnelToken: 'lp_tun_sec_99a81b2c7e0d3f4',
     remotePath: '/var/log/nginx',
     isConnected: false,
-    latencyMs: 78,
-    cipher: 'aes128-ctr',
+    latencyMs: 38,
+    cipher: 'tls1.3-chacha20-poly1305',
     fingerprint: 'SHA256:p1L4yT...5zE33'
   }
 ];

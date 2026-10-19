@@ -47,32 +47,33 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Healthcheck
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, "{\"status\":\"healthy\",\"engine\":\"LogPulse Go 1.25 Core\",\"uptime\":\"ok\"}")
-	})
+	}
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/api/health", healthHandler)
 
 	// 1. Auth routes
-	mux.HandleFunc("POST /api/auth/login", handlers.HandleLogin)
-	mux.HandleFunc("GET /api/auth/me", handlers.HandleMe)
+	mux.HandleFunc("/api/auth/login", handlers.HandleLogin)
+	mux.HandleFunc("/api/auth/me", handlers.HandleMe)
 
 	// 2. SSH connection routes
-	mux.HandleFunc("POST /api/ssh/test", handlers.HandleSSHTest)
-	mux.HandleFunc("GET /api/ssh/connections", handlers.HandleGetSSHConnections)
-	mux.HandleFunc("POST /api/ssh/connect", handlers.HandleSaveSSHConnection)
+	mux.HandleFunc("/api/ssh/test", handlers.HandleSSHTest)
+	mux.HandleFunc("/api/ssh/connections", handlers.HandleGetSSHConnections)
+	mux.HandleFunc("/api/ssh/connect", handlers.HandleSaveSSHConnection)
 
 	// 3. File tree explorer routes
-	mux.HandleFunc("GET /api/files/tree", handlers.HandleGetFileTree)
+	mux.HandleFunc("/api/files/tree", handlers.HandleGetFileTree)
 
 	// 4. Log stream, query & tailing routes
-	mux.HandleFunc("GET /api/logs", handlers.HandleGetLogs)
-	mux.HandleFunc("GET /api/logs/stream", handlers.HandleLogsStream)
-	mux.HandleFunc("GET /api/logs/download", handlers.HandleDownloadLog)
+	mux.HandleFunc("/api/logs", handlers.HandleGetLogs)
+	mux.HandleFunc("/api/logs/stream", handlers.HandleLogsStream)
+	mux.HandleFunc("/api/logs/download", handlers.HandleDownloadLog)
 
 	// 5. Telemetry & settings routes
-	mux.HandleFunc("GET /api/metrics", handlers.HandleGetMetrics)
-	mux.HandleFunc("GET /api/settings", handlers.HandleSettings)
-	mux.HandleFunc("POST /api/settings", handlers.HandleSettings)
+	mux.HandleFunc("/api/metrics", handlers.HandleGetMetrics)
+	mux.HandleFunc("/api/settings", handlers.HandleSettings)
 
 	// Wrap middleware
 	handler := withLogger(withCORS(mux))

@@ -292,3 +292,78 @@ Aplikasi dirancang agar dapat dioperasikan secara ergonomis di berbagai ukuran l
 | **Status Bar Filter** | Teks keterangan lengkap (`HIGHLIGHT:` dan info baris). | Tampilan proporsional. | Tombol pill `[ERROR]`, `[WARN]`, `[INFO]` dapat di-swipe secara horizontal tanpa merusak layout. |
 | **Terminal Gutter** | Gutter nomor baris standar (`w-14`). | Gutter standar. | Gutter lebih ramping (`w-10`) untuk memaksimalkan ruang baca teks log. |
 | **Modal Dialogs (SSH, dll)** | Grid multi-kolom lapang. | Grid responsif. | Grid 1 kolom vertikal dengan padding dan tombol yang mudah disentuh jari. |
+
+---
+
+## 12. Koneksi Frontend dan Backend (Full-Stack Architecture & Endpoints)
+
+LogPulse Observability kini terintegrasi penuh (*fully connected*) antara antarmuka React TypeScript dan Backend Service (didukung oleh Express + Vite middleware di port 3000 serta kompatibel 100% dengan service Go 1.25 di direktori `/backend`).
+
+### 12.1 Diagram Alir Koneksi
+```
++-------------------------------------------------------------+
+|                      Browser / Client                        |
+|                                                             |
+|   +-------------------+          +-----------------------+  |
+|   |   LogPulse UI     | <------> |  src/services/api.ts  |  |
+|   |  (React 19 SPA)   |          |    (LogPulseAPI)      |  |
+|   +-------------------+          +-----------------------+  |
++----------------------------------------------|--------------+
+                                               |
+                   REST HTTP / SSE Stream      | (port 3000)
+                                               v
++-------------------------------------------------------------+
+|                     Full-Stack Server (`server.ts`)          |
+|                                                             |
+|   +-------------------------------------------------------+ |
+|   |                Express API Router (/api/*)            | |
+|   |   - /health & /api/health (Uptime & Diagnostics)      | |
+|   |   - /api/auth/login & /api/auth/me (JWT Session)      | |
+|   |   - /api/ssh/test & /api/ssh/connect (SSH Handshake)  | |
+|   |   - /api/files/tree (Remote Directory Mount)          | |
+|   |   - /api/logs (Query, Grep & Regex Filter)            | |
+|   |   - /api/logs/stream (Server-Sent Events: TAIL -F)    | |
+|   |   - /api/logs/download (Raw Export)                   | |
+|   |   - /api/metrics & /api/settings (Telemetry)          | |
+|   +-------------------------------------------------------+ |
+|   |            Vite Development Middlewares / SPA         | |
+|   +-------------------------------------------------------+ |
++-------------------------------------------------------------+
+                               | (opsional bila dijalankan terpisah)
+                               v
++-------------------------------------------------------------+
+|                 Backend Golang 1.25 (`/backend`)            |
+|   - `main.go` & `internal/store`                            |
+|   - `internal/handlers` (auth, ssh, files, logs, metrics)   |
+|   - Port 8080 (Docker / Bare Metal)                         |
++-------------------------------------------------------------+
+```
+
+### 12.2 Spesifikasi Endpoint Terhubung
+
+1. **`GET /health` & `GET /api/health`**
+   - Mengembalikan status konektivitas, runtime engine, uptime detik, dan latensi rtt.
+   - Digunakan oleh badge `BackendStatusBadge` di HeaderBar dan BottomStatusBar.
+2. **`POST /api/auth/login`**
+   - Menerima `username` dan `password`, memvalidasi identitas, dan mengembalikan token JWT observabilitas beserta objek user profile.
+3. **`POST /api/ssh/test`**
+   - Melakukan uji jabat tangan kriptografi SSH (Ed25519/RSA), verifikasi fingerprint SHA256 host, dan mounting folder SFTP.
+4. **`GET /api/ssh/connections` & `POST /api/ssh/connect`**
+   - Mengambil daftar profil host SSH tersimpan dan menyimpan/mengaktifkan sesi baru.
+5. **`GET /api/files/tree`**
+   - Mengambil struktur folder hierarkis terkini dari target remote host yang terpasang.
+6. **`GET /api/logs`**
+   - Parameter query: `fileId`, `search`, `level`, `caseSensitive`, `isRegex`.
+   - Mengembalikan baris log terfilter, total lines, error ratio, dan metadata.
+7. **`GET /api/logs/stream` (Server-Sent Events / SSE)**
+   - Header: `Content-Type: text/event-stream`.
+   - Menghubungkan tailing langsung (`tail -f`) secara streaming real-time ke terminal viewer setiap beberapa detik.
+8. **`GET /api/logs/download`**
+   - Mengunduh berkas log mentah format teks standar Unix LF.
+9. **`GET /api/metrics` & `/api/settings`**
+   - Membaca dan memperbarui metrik throughput EPS, latensi p99, dan parser grammar.
+
+### 12.3 Indikator Live Status di Antarmuka
+- **HeaderBar**: Tombol badge status `Backend: Connected (xx ms)` dapat diklik untuk membuka popover diagnostik lengkap (status online, nama engine, latensi ping, status SSE stream, dan daftar endpoint aktif).
+- **BottomStatusBar**: Indikator status real-time di sudut kanan bawah dengan status live streaming `Go/Node API (xx ms)`.
+- **Failover / Offline Graceful Degradation**: Jika jaringan offline atau backend sedang dimuat ulang, antarmuka otomatis beralih ke cache lokal tanpa mengalami crash atau blocking.

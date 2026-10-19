@@ -3,6 +3,7 @@ import { SAMPLE_FILES, MOCK_NEW_STREAM_LINES } from './data/sampleLogs';
 import { DEFAULT_SSH_CONNECTIONS, INITIAL_FILE_TREE } from './data/fileTreeData';
 import { LogFile, LogLevel, LogLine } from './types/log';
 import { SSHConnection, FileTreeNode } from './types/ssh';
+import { LogPulseAPI, BackendStatus } from './services/api';
 import { LoginScreen } from './components/LoginScreen';
 import { HeaderBar } from './components/HeaderBar';
 import { Sidebar } from './components/Sidebar';
@@ -16,6 +17,18 @@ import { MetricsViewModal } from './components/MetricsViewModal';
 import { GrepViewModal } from './components/GrepViewModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SSHConnectionModal } from './components/SSHConnectionModal';
+import { ConnectionSettingsModal } from './components/ConnectionSettingsModal';
+
+function findFirstFileNode(nodes: FileTreeNode[]): FileTreeNode | null {
+  for (const node of nodes) {
+    if (node.type === 'file') return node;
+    if (node.children) {
+      const found = findFirstFileNode(node.children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
 
 export default function App() {
   // Current screen mode: 'login' | 'workspace'
@@ -27,6 +40,9 @@ export default function App() {
     email: 'julian.putra99@gmail.com',
     role: 'Site Reliability Engineer (L5)'
   });
+
+  // Backend Connection Status
+  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
 
   // SSH Connections & Active Connection
   const [sshConnections, setSshConnections] = useState<SSHConnection[]>(DEFAULT_SSH_CONNECTIONS);
@@ -64,6 +80,55 @@ export default function App() {
   const [isGrepModalOpen, setIsGrepModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
+  // Initial Backend Discovery & Synchronization
+  useEffect(() => {
+    let mounted = true;
+
+    async function initBackend() {
+      try {
+        const status = await LogPulseAPI.checkHealth();
+        if (mounted) setBackendStatus(status);
+
+        // Fetch backend SSH connections
+        const conns = await LogPulseAPI.getSSHConnections();
+        if (mounted && conns && conns.length > 0) {
+          setSshConnections(conns);
+        }
+
+        // Fetch backend File Tree
+        const tree = await LogPulseAPI.getFileTree();
+        if (mounted && tree && tree.length > 0) {
+          setFileTree(tree);
+        }
+
+        // Fetch initial logs from backend for production-api
+        const logsRes = await LogPulseAPI.getLogs({ fileId: 'production-api' });
+        if (mounted && logsRes && logsRes.lines && logsRes.lines.length > 0) {
+          setFiles(prev => prev.map(f => f.id === 'production-api' ? {
+            ...f,
+            lines: logsRes.lines,
+            lineCount: logsRes.totalLines,
+            stats: logsRes.stats
+          } : f));
+        }
+      } catch (err) {
+        console.warn('Backend sync failed, running with local caches:', err);
+      }
+    }
+
+    initBackend();
+
+    const pingInterval = setInterval(async () => {
+      const status = await LogPulseAPI.checkHealth();
+      if (mounted) setBackendStatus(status);
+    }, 12000);
+
+    return () => {
+      mounted = false;
+      clearInterval(pingInterval);
+    };
+  }, []);
+
   // Active SSH object
   const activeConnection = useMemo(() => {
     return sshConnections.find(c => c.id === activeSSHId) || sshConnections[0];
@@ -80,12 +145,45 @@ export default function App() {
     return currentFile.lines.find(l => l.lineNumber === selectedLineNumber) || currentFile.lines[0] || null;
   }, [currentFile, selectedLineNumber]);
 
-  // Simulate real-time streaming when isTailing is active
+  // Real-time tailing via SSE from backend, with local fallback
   useEffect(() => {
     if (!isTailing || currentFileId !== 'production-api') return;
 
+    let sseActive = false;
+
+    // Connect to Server-Sent Events (SSE) from the backend
+    const unsubscribeSSE = LogPulseAPI.subscribeLogStream(
+      (newLine: LogLine) => {
+        sseActive = true;
+        setFiles(prevFiles =>
+          prevFiles.map(file => {
+            if (file.id !== 'production-api') return file;
+
+            return {
+              ...file,
+              lineCount: file.lineCount + 1,
+              stats: {
+                ...file.stats,
+                errorCount: file.stats.errorCount + (newLine.level === 'ERROR' ? 1 : 0),
+                warnCount: file.stats.warnCount + (newLine.level === 'WARN' ? 1 : 0),
+                infoCount: file.stats.infoCount + (newLine.level === 'INFO' ? 1 : 0),
+                debugCount: file.stats.debugCount + (newLine.level === 'DEBUG' ? 1 : 0),
+              },
+              lines: [...file.lines, newLine]
+            };
+          })
+        );
+      },
+      (connected) => {
+        setBackendStatus(prev => prev ? { ...prev, sseActive: connected } : null);
+      }
+    );
+
+    // Backup timer fallback in case SSE is interrupted or backend is paused
     let mockIndex = 0;
     const interval = setInterval(() => {
+      if (sseActive) return; // SSE is delivering live data, no need for local mock
+
       const template = MOCK_NEW_STREAM_LINES[mockIndex % MOCK_NEW_STREAM_LINES.length];
       mockIndex++;
 
@@ -125,12 +223,53 @@ export default function App() {
       );
     }, 4500);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribeSSE();
+      clearInterval(interval);
+    };
   }, [isTailing, currentFileId]);
 
   // Handle clicking a node in the File Tree
-  const handleSelectTreeNode = (node: FileTreeNode) => {
+  const handleSelectTreeNode = async (node: FileTreeNode) => {
     if (node.type !== 'file') return;
+
+    // Check if backend has logs for this file
+    if (node.fileId) {
+      try {
+        const backendLog = await LogPulseAPI.getLogs({ fileId: node.fileId });
+        if (backendLog && backendLog.lines && backendLog.lines.length > 0) {
+          setFiles(prev => {
+            const exists = prev.find(f => f.id === node.fileId);
+            if (exists) {
+              return prev.map(f => f.id === node.fileId ? {
+                ...f,
+                lines: backendLog.lines,
+                lineCount: backendLog.totalLines,
+                stats: backendLog.stats
+              } : f);
+            } else {
+              const newFile: LogFile = {
+                id: node.fileId!,
+                path: node.path,
+                filename: node.name,
+                size: node.size || '12.4 MB',
+                lineCount: backendLog.totalLines,
+                encoding: 'UTF-8',
+                lineEnding: 'LF (Unix)',
+                stats: backendLog.stats,
+                lines: backendLog.lines
+              };
+              return [newFile, ...prev];
+            }
+          });
+          setCurrentFileId(node.fileId);
+          setSelectedLineNumber(backendLog.lines[0]?.lineNumber || 1);
+          return;
+        }
+      } catch (err) {
+        console.warn('Backend getLogs error:', err);
+      }
+    }
 
     // Check if file already exists in files list
     const existing = files.find(f => f.id === node.fileId || f.path === node.path);
@@ -164,7 +303,7 @@ export default function App() {
           level: 'INFO',
           service: node.name.replace('.log', ''),
           message: `Mounted remote SSH file ${node.path} via SFTP stream (${activeConnection.host})`,
-          attributes: { host: activeConnection.host, user: activeConnection.username }
+          attributes: { host: activeConnection.host || activeConnection.name, user: activeConnection.username || 'local' }
         },
         {
           id: `${node.id}-2`,
@@ -172,7 +311,7 @@ export default function App() {
           timestamp: new Date().toISOString(),
           level: 'INFO',
           service: node.name.replace('.log', ''),
-          message: `Read buffer allocated: 64KB chunk size. Cipher: ${activeConnection.cipher}`,
+          message: `Read buffer allocated: 64KB chunk size. Cipher: ${activeConnection.cipher || 'direct-io'}`,
           attributes: { latency: `${activeConnection.latencyMs}ms` }
         },
         {
@@ -192,18 +331,31 @@ export default function App() {
   };
 
   // Handle saving SSH connection
-  const handleSaveSSHConnection = (updated: SSHConnection) => {
+  const handleSaveSSHConnection = async (updated: SSHConnection) => {
     setSshConnections(prev => prev.map(c => c.id === updated.id ? updated : c));
     setActiveSSHId(updated.id);
 
+    // Sync to backend and reload fileTree
+    try {
+      await LogPulseAPI.saveSSHConnection(updated);
+      const updatedTree = await LogPulseAPI.getFileTree();
+      if (updatedTree && updatedTree.length > 0) {
+        setFileTree(updatedTree);
+        return;
+      }
+    } catch (err) {
+      console.warn('Backend SSH save error:', err);
+    }
+
     // Update root folder in file tree if remote path changed
     setFileTree(prev => {
+      const targetPath = updated.localPath || updated.remotePath || '/var/log';
       return prev.map((rootNode, idx) => {
         if (idx === 0) {
           return {
             ...rootNode,
-            name: updated.remotePath,
-            path: updated.remotePath,
+            name: targetPath,
+            path: targetPath,
           };
         }
         return rootNode;
@@ -372,6 +524,13 @@ export default function App() {
         user={currentUser}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         isMobileSidebarOpen={isMobileSidebarOpen}
+        backendStatus={backendStatus}
+        onRefreshBackend={async () => {
+          const status = await LogPulseAPI.checkHealth();
+          setBackendStatus(status);
+        }}
+        activeConnection={activeConnection}
+        onOpenConnectionModal={() => setIsSSHModalOpen(true)}
       />
 
       {/* Main Workspace Body: Sidebar (File Tree + SSH) + Log Viewer Viewport */}
@@ -385,6 +544,10 @@ export default function App() {
           onOpenSSHModal={() => setIsSSHModalOpen(true)}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          onRefreshTree={async () => {
+            const tree = await LogPulseAPI.getFileTree();
+            if (tree && tree.length > 0) setFileTree(tree);
+          }}
         />
 
         {/* Central Log Viewer Area */}
@@ -451,6 +614,7 @@ export default function App() {
             selectedLineNumber={selectedLineNumber}
             isTailing={isTailing}
             onToggleTail={() => setIsTailing(!isTailing)}
+            backendStatus={backendStatus}
           />
         </main>
       </div>
@@ -466,14 +630,36 @@ export default function App() {
         </button>
       </div>
 
-      {/* Modals & Dialogs */}
-      <SSHConnectionModal
+      {/* Modals & Dialogs: Comprehensive Connection Config & SQLite Manager */}
+      <ConnectionSettingsModal
         isOpen={isSSHModalOpen}
         onClose={() => setIsSSHModalOpen(false)}
         connections={sshConnections}
         activeConnectionId={activeSSHId}
-        onSaveConnection={handleSaveSSHConnection}
-        onSelectConnection={setActiveSSHId}
+        onSelectConnection={async (connId, updatedTree) => {
+          setActiveSSHId(connId);
+          try {
+            const act = await LogPulseAPI.activateConnection(connId);
+            const newTree = (updatedTree && updatedTree.length > 0)
+              ? updatedTree
+              : (act.fileTree && act.fileTree.length > 0 ? act.fileTree : await LogPulseAPI.getFileTree());
+            if (newTree && newTree.length > 0) {
+              setFileTree(newTree);
+              const first = findFirstFileNode(newTree);
+              if (first) {
+                handleSelectTreeNode(first);
+              }
+            }
+          } catch (err) {
+            console.warn('Activate connection error:', err);
+          }
+        }}
+        onRefreshConnections={async () => {
+          const conns = await LogPulseAPI.getConnections();
+          if (conns && conns.length > 0) {
+            setSshConnections(conns);
+          }
+        }}
       />
 
       <JumpModal

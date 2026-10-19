@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Folder, 
   FolderOpen, 
@@ -10,7 +10,10 @@ import {
   HardDrive,
   Settings2,
   FolderTree,
-  X
+  X,
+  Globe,
+  Database,
+  Radio
 } from 'lucide-react';
 import { FileTreeNode, SSHConnection } from '../types/ssh';
 
@@ -22,6 +25,7 @@ interface SidebarProps {
   onOpenSSHModal: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  onRefreshTree?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,9 +36,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSSHModal,
   isMobileOpen = false,
   onCloseMobile,
+  onRefreshTree,
 }) => {
   const [treeState, setTreeState] = useState<FileTreeNode[]>(fileTree);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Sync internal state when prop fileTree changes
+  useEffect(() => {
+    setTreeState(fileTree);
+  }, [fileTree]);
 
   // Toggle folder open/closed
   const toggleFolder = (nodeId: string) => {
@@ -55,6 +65,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsRefreshing(true);
+    if (onRefreshTree) {
+      onRefreshTree();
+    }
     setTimeout(() => {
       setIsRefreshing(false);
     }, 600);
@@ -101,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </span>
                 </div>
                 {node.children && (
-                  <span className="text-[10px] text-slate-500 font-sans">
+                  <span className="text-[10px] text-slate-600 font-mono">
                     {node.children.length}
                   </span>
                 )}
@@ -109,7 +122,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Children */}
               {node.isOpen && node.children && (
-                <div className="border-l border-[#1a2536] ml-3.5">
+                <div className="relative">
+                  <div 
+                    style={{ left: `${depth * 14 + 14}px` }} 
+                    className="absolute top-0 bottom-0 w-[1px] bg-[#1a2538]" 
+                  />
                   {renderTree(node.children, depth + 1)}
                 </div>
               )}
@@ -119,26 +136,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div
               onClick={() => handleFileClick(node)}
               style={{ paddingLeft: `${depth * 14 + 16}px` }}
-              className={`flex items-center justify-between py-1.5 pr-2 my-0.5 rounded cursor-pointer transition-colors group ${
+              className={`flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-colors ${
                 isSelected
-                  ? 'bg-[#12223a] text-cyan-300 border-l-2 border-cyan-400 font-medium'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#0f1726]'
+                  ? 'bg-cyan-950/70 text-cyan-300 font-semibold border-l-2 border-cyan-400'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#101726]'
               }`}
-              title={`${node.path} (${node.size || ''})`}
             >
-              <div className="flex items-center gap-1.5 truncate">
-                <FileCode2
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    isSelected ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'
-                  }`}
-                />
+              <div className="flex items-center gap-2 truncate">
+                <FileCode2 className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-cyan-400' : 'text-slate-500'}`} />
                 <span className="truncate">{node.name}</span>
               </div>
-              {node.size && (
-                <span className="text-[10px] text-slate-500 font-sans tabular-nums shrink-0 ml-1">
-                  {node.size}
-                </span>
-              )}
+              <div className="flex items-center gap-2 text-[10px] text-slate-500 shrink-0">
+                {node.size && <span>{node.size}</span>}
+              </div>
             </div>
           )}
         </div>
@@ -146,29 +156,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
+  const isLocal = activeConnection?.type === 'local_folder';
+  const isTunnel = activeConnection?.type === 'remote_tunnel';
+
   const sidebarContent = (
-    <div className="flex flex-col justify-between h-full select-none text-xs">
-      {/* Top Section: SSH Remote Connection Panel */}
-      <div className="p-2.5 border-b border-[#182335] bg-[#0c121d]">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                activeConnection.isConnected
-                  ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.8)]'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-[10.5px] font-mono font-semibold tracking-wider text-slate-400 uppercase">
-              SSH HOST
-            </span>
+    <div className="flex flex-col h-full overflow-hidden select-none">
+      
+      {/* Top Section: ACTIVE CONNECTION BANNER */}
+      <div className="p-3 border-b border-[#182336] bg-[#0c121e]">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">
+            <Database className="w-3.5 h-3.5 text-cyan-400" />
+            <span>MOUNTED CONNECTION</span>
           </div>
 
           <div className="flex items-center gap-1">
             <button
               onClick={onOpenSSHModal}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#131d2e] hover:bg-[#1a2942] border border-[#233550] text-[10.5px] text-cyan-300 hover:text-cyan-200 transition-colors cursor-pointer"
-              title="Configure SSH Connection & Remote Folder"
+              title="Configure Connections & SQLite Credentials"
             >
               <Settings2 className="w-3 h-3 text-cyan-400" />
               <span>Config</span>
@@ -185,31 +191,60 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Active SSH Connection Card */}
+        {/* Active Connection Card */}
         <div 
           onClick={onOpenSSHModal}
-          className="p-2 rounded-lg bg-[#070b12] border border-[#1b273b] hover:border-cyan-500/50 cursor-pointer transition-colors group"
+          className={`p-2.5 rounded-lg border cursor-pointer transition-all group ${
+            isLocal 
+              ? 'bg-[#120f08] border-amber-800/50 hover:border-amber-500/70'
+              : isTunnel
+              ? 'bg-[#081214] border-teal-800/50 hover:border-teal-500/70'
+              : 'bg-[#070b12] border-[#1b273b] hover:border-cyan-500/50'
+          }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate">
-              <Server className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="font-mono text-[11.5px] font-semibold text-white group-hover:text-cyan-300 truncate">
-                {activeConnection.name}
+              {isLocal ? (
+                <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : isTunnel ? (
+                <Globe className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              ) : (
+                <Server className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              )}
+              <span className={`font-mono text-[11.5px] font-semibold truncate ${
+                isLocal ? 'text-amber-200 group-hover:text-amber-300' : isTunnel ? 'text-teal-200 group-hover:text-teal-300' : 'text-white group-hover:text-cyan-300'
+              }`}>
+                {activeConnection?.name || 'Local System Logs'}
               </span>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-800/40 shrink-0">
-              {activeConnection.latencyMs}ms
+            <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border shrink-0 ${
+              isLocal 
+                ? 'text-amber-400 bg-amber-950/50 border-amber-800/50' 
+                : 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40'
+            }`}>
+              {isLocal ? '<1ms (I/O)' : `${activeConnection?.latencyMs || 14}ms`}
             </span>
           </div>
 
           <div className="mt-1 flex items-center justify-between text-[10.5px] font-mono text-slate-400 truncate">
-            <span className="truncate text-slate-400">{activeConnection.username}@{activeConnection.host}</span>
-            <span className="text-slate-500 shrink-0 ml-1">:{activeConnection.port}</span>
+            {isLocal ? (
+              <span className="truncate text-amber-300/90 font-medium">{activeConnection?.localPath || '/var/log'}</span>
+            ) : (
+              <span className="truncate text-slate-400">{activeConnection?.username}@{activeConnection?.host}:{activeConnection?.port}</span>
+            )}
+            <span className="text-[9.5px] font-mono bg-black/40 text-slate-400 px-1 rounded ml-1 shrink-0">
+              {isLocal ? 'LOCAL' : isTunnel ? 'TUNNEL' : 'SSH'}
+            </span>
           </div>
 
-          <div className="mt-1 text-[10px] font-mono text-cyan-400/90 flex items-center gap-1 truncate pt-0.5 border-t border-[#141d2c]">
-            <span className="text-slate-500">Mounted:</span>
-            <span className="truncate">{activeConnection.remotePath}</span>
+          <div className="mt-1 text-[10px] font-mono text-slate-400 flex items-center justify-between pt-1 border-t border-[#162234]">
+            <span className="flex items-center gap-1 text-slate-400">
+              <Database className="w-2.5 h-2.5 text-cyan-400" />
+              <span>SQLite Synced</span>
+            </span>
+            <span className="text-cyan-400/90 truncate">
+              {isLocal ? `${activeConnection?.fileFilter || '*.log'}` : `${activeConnection?.remotePath || '/var/log'}`}
+            </span>
           </div>
         </div>
       </div>
@@ -220,13 +255,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="px-3 py-2 border-b border-[#152030] flex items-center justify-between bg-[#080c14]">
           <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">
             <FolderTree className="w-3.5 h-3.5 text-cyan-400" />
-            <span>REMOTE FILE TREE</span>
+            <span>{isLocal ? 'LOCAL FILE TREE' : 'REMOTE FILE TREE'}</span>
           </div>
 
           <button
             onClick={handleRefresh}
             className="p-1 rounded hover:bg-[#141f30] text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
-            title="Refresh remote directory tree"
+            title="Refresh directory tree from backend"
           >
             <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
@@ -234,16 +269,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Scrollable Tree View */}
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
-          {renderTree(treeState)}
+          {treeState && treeState.length > 0 ? (
+            renderTree(treeState)
+          ) : (
+            <div className="p-4 text-center text-slate-500 font-mono text-[11px]">
+              No files discovered. Click refresh or configure connection.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bottom Memory & SSH Buffer Widget */}
+      {/* Bottom Memory & SQLite Buffer Widget */}
       <div className="p-2.5 border-t border-[#182233] bg-[#070a10] shrink-0">
         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
           <span className="tracking-wider uppercase font-semibold text-slate-500 flex items-center gap-1">
             <HardDrive className="w-3 h-3 text-cyan-500" />
-            MEMORY BUFFER
+            BUFFER &amp; STORAGE
           </span>
           <span className="text-slate-300 font-medium">48.2 MB / 256 MB</span>
         </div>
@@ -257,8 +298,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="mt-1.5 flex items-center justify-between text-[9.5px] font-mono text-slate-500">
-          <span>SSH-2.0 · OpenSSH</span>
-          <span>{activeConnection.cipher.split('@')[0]}</span>
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span>SQLite: data/logpulse.sqlite</span>
+          </span>
+          <span>{isLocal ? 'POSIX Direct I/O' : (activeConnection?.cipher || 'chacha20-poly1305').split('@')[0]}</span>
         </div>
       </div>
     </div>

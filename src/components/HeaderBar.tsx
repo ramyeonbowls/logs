@@ -6,9 +6,16 @@ import {
   ShieldCheck, 
   ChevronDown,
   PanelLeft,
-  X
+  X,
+  Server,
+  Folder,
+  Globe,
+  Database
 } from 'lucide-react';
 import { LogFile } from '../types/log';
+import { BackendStatusBadge } from './BackendStatusBadge';
+import { BackendStatus } from '../services/api';
+import { AppConnection } from '../types/ssh';
 
 interface HeaderBarProps {
   currentFile: LogFile;
@@ -18,6 +25,10 @@ interface HeaderBarProps {
   user: { name: string; email: string; role: string };
   onToggleMobileSidebar: () => void;
   isMobileSidebarOpen: boolean;
+  backendStatus?: BackendStatus | null;
+  onRefreshBackend?: () => void;
+  activeConnection?: AppConnection;
+  onOpenConnectionModal?: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -28,6 +39,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   user,
   onToggleMobileSidebar,
   isMobileSidebarOpen,
+  backendStatus,
+  onRefreshBackend,
+  activeConnection,
+  onOpenConnectionModal,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -41,6 +56,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const isLocal = activeConnection?.type === 'local_folder';
+  const isTunnel = activeConnection?.type === 'remote_tunnel';
 
   return (
     <header className="h-12 bg-[#0d121c] border-b border-[#1b2434] px-2.5 sm:px-3 flex items-center justify-between text-xs select-none z-30 shrink-0">
@@ -93,6 +111,35 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Right zone: Actions */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        
+        {/* Active Connection Switcher / Pill */}
+        {activeConnection && onOpenConnectionModal && (
+          <button
+            onClick={onOpenConnectionModal}
+            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-mono transition-colors cursor-pointer ${
+              isLocal
+                ? 'bg-amber-950/40 border-amber-800/50 text-amber-300 hover:bg-amber-950/70'
+                : isTunnel
+                ? 'bg-teal-950/40 border-teal-800/50 text-teal-300 hover:bg-teal-950/70'
+                : 'bg-cyan-950/40 border-cyan-800/50 text-cyan-300 hover:bg-cyan-950/70'
+            }`}
+            title="Configure Connections & SQLite Credentials"
+          >
+            {isLocal ? (
+              <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            ) : isTunnel ? (
+              <Globe className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            ) : (
+              <Server className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            )}
+            <span className="truncate max-w-[140px] font-medium">{activeConnection.name}</span>
+            <span className="text-[9.5px] text-slate-500">({isLocal ? 'Local' : `${activeConnection.latencyMs}ms`})</span>
+          </button>
+        )}
+
+        {/* Backend Connected Indicator Badge */}
+        <BackendStatusBadge status={backendStatus || null} onRefresh={onRefreshBackend} />
+
         {/* TAIL -F Toggle button */}
         <button
           onClick={onToggleTail}
@@ -120,33 +167,46 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <ChevronDown className="w-3 h-3 text-slate-400 pr-0.5 hidden xs:block" />
           </button>
 
-          {/* User Dropdown */}
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-56 rounded-lg bg-[#0e1624] border border-[#223149] shadow-2xl py-2 z-50 text-slate-300">
-              <div className="px-3.5 py-2 border-b border-[#1d2b40]">
-                <div className="font-semibold text-white text-[13px] truncate">
-                  {user.name}
-                </div>
-                <div className="text-[11px] text-slate-400 truncate">
-                  {user.email}
-                </div>
-                <div className="mt-1 flex items-center gap-1 text-[10px] text-cyan-400 font-mono">
-                  <ShieldCheck className="w-3 h-3" />
+            <div className="absolute right-0 mt-2 w-64 bg-[#0d1420] border border-[#1e2a3e] rounded-xl shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-3 py-2 border-b border-[#1b263a]">
+                <div className="font-semibold text-slate-100 text-xs truncate">{user.name}</div>
+                <div className="text-[11px] font-mono text-cyan-400 truncate">{user.email}</div>
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
                   <span>{user.role}</span>
                 </div>
               </div>
 
-              <div className="pt-1 mt-1 text-[12px]">
+              <div className="py-1">
+                {onOpenConnectionModal && (
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onOpenConnectionModal();
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-[#162236] text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Database className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Connection Settings (SQLite)</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     setShowUserMenu(false);
                     onSignOut();
                   }}
-                  className="w-full px-3.5 py-1.5 text-left text-red-400 hover:bg-red-950/40 hover:text-red-300 flex items-center gap-2 cursor-pointer"
+                  className="w-full px-3 py-2 text-left hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 flex items-center gap-2 cursor-pointer transition-colors"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out / Switch Screen</span>
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Sign Out Session</span>
                 </button>
+              </div>
+
+              <div className="px-3 py-1.5 border-t border-[#182335] text-[10px] font-mono text-slate-500 flex items-center justify-between">
+                <span>Storage: SQLite DB</span>
+                <span>Active</span>
               </div>
             </div>
           )}

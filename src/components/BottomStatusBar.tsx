@@ -1,12 +1,13 @@
-import React from 'react';
 import { LogFile } from '../types/log';
-import { Activity } from 'lucide-react';
+import { Activity, Server } from 'lucide-react';
+import { BackendStatus } from '../services/api';
 
 interface BottomStatusBarProps {
   currentFile: LogFile;
   selectedLineNumber: number | null;
   isTailing: boolean;
   onToggleTail: () => void;
+  backendStatus?: BackendStatus | null;
 }
 
 export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
@@ -14,6 +15,7 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
   selectedLineNumber,
   isTailing,
   onToggleTail,
+  backendStatus,
 }) => {
   const currentLine = selectedLineNumber ?? 1048;
   const percentage = ((currentLine / currentFile.lineCount) * 100).toFixed(1);
@@ -65,6 +67,20 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
 
       {/* Right info items */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Backend Connectivity Status */}
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              backendStatus?.connected ? 'bg-emerald-400' : 'bg-rose-500'
+            }`}
+          />
+          <span className={backendStatus?.connected ? 'text-emerald-400' : 'text-slate-500'}>
+            Go/Node API {backendStatus?.connected ? `(${backendStatus.latencyMs}ms)` : 'Offline'}
+          </span>
+        </div>
+
+        <span className="text-slate-700 hidden sm:inline">|</span>
+
         {/* Live tailing toggle button */}
         <button
           onClick={onToggleTail}
