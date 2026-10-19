@@ -24,10 +24,21 @@ var GlobalStore *Store
 
 func init() {
 	GlobalStore = NewStore()
-	go GlobalStore.startBackgroundStreamGenerator()
 }
 
 func NewStore() *Store {
+	return &Store{
+		Files:             make(map[string]*models.LogFile),
+		StreamSubscribers: make(map[chan models.LogLine]bool),
+		Settings: models.Settings{
+			DefaultGrammar: "raw_ansi",
+			Timezone:       "utc",
+			MaxBufferSize:  256,
+		},
+	}
+}
+
+func newDemoStore() *Store {
 	s := &Store{
 		Files:             make(map[string]*models.LogFile),
 		StreamSubscribers: make(map[chan models.LogLine]bool),

@@ -46,6 +46,7 @@ export interface FileTreeNode {
   path: string;
   type: 'folder' | 'file';
   size?: string;
+  modifiedAt?: number;
   lineCount?: number;
   fileId?: string;
   children?: FileTreeNode[];

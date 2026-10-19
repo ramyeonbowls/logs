@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Folder, 
   FolderOpen, 
@@ -13,7 +13,8 @@ import {
   X,
   Globe,
   Database,
-  Radio
+  Radio,
+  Search
 } from 'lucide-react';
 import { FileTreeNode, SSHConnection } from '../types/ssh';
 
@@ -25,7 +26,7 @@ interface SidebarProps {
   onOpenSSHModal: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
-  onRefreshTree?: () => void;
+  onRefreshTree?: () => void | Promise<void>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -40,11 +41,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [treeState, setTreeState] = useState<FileTreeNode[]>(fileTree);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  const [treeSearch, setTreeSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   // Sync internal state when prop fileTree changes
   useEffect(() => {
     setTreeState(fileTree);
   }, [fileTree]);
+
+  const visibleTree = useMemo(() => {
+    const query = treeSearch.trim().toLowerCase();
+    const filterNodes = (nodes: FileTreeNode[]): FileTreeNode[] => nodes
+      .map(node => {
+        if (node.type === 'file') {
+          return !query || node.name.toLowerCase().includes(query) || node.path.toLowerCase().includes(query)
+            ? node
+            : null;
+        }
+
+        const children = filterNodes(node.children || []);
+        if (query && children.length === 0) return null;
+        return { ...node, children, isOpen: query ? true : node.isOpen };
+      })
+      .filter((node): node is FileTreeNode => node !== null)
+      .sort((left, right) => {
+        const difference = (left.modifiedAt || 0) - (right.modifiedAt || 0);
+        return sortOrder === 'newest' ? -difference : difference;
+      });
+
+    return filterNodes(treeState);
+  }, [treeState, treeSearch, sortOrder]);
 
   // Toggle folder open/closed
   const toggleFolder = (nodeId: string) => {
@@ -62,15 +89,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setTreeState(prev => updateNodes(prev));
   };
 
-  const handleRefresh = (e: React.MouseEvent) => {
+  const handleRefresh = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsRefreshing(true);
-    if (onRefreshTree) {
-      onRefreshTree();
-    }
-    setTimeout(() => {
+    setTreeError(null);
+    try {
+      await onRefreshTree?.();
+    } catch (error: any) {
+      setTreeState([]);
+      setTreeError(error.message || 'Could not refresh directory tree.');
+    } finally {
       setIsRefreshing(false);
-    }, 600);
+    }
   };
 
   const handleFileClick = (node: FileTreeNode) => {
@@ -93,6 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div>
               <div
                 onClick={() => toggleFolder(node.id)}
+                title={node.modifiedAt ? `Updated ${new Date(node.modifiedAt).toLocaleString()}` : undefined}
                 style={{ paddingLeft: `${depth * 14 + 8}px` }}
                 className="flex items-center justify-between py-1.5 pr-2 rounded hover:bg-[#121c2d] text-slate-300 hover:text-white cursor-pointer group transition-colors"
               >
@@ -135,6 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             /* File Item */
             <div
               onClick={() => handleFileClick(node)}
+              title={node.modifiedAt ? `Updated ${new Date(node.modifiedAt).toLocaleString()}` : undefined}
               style={{ paddingLeft: `${depth * 14 + 16}px` }}
               className={`flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-colors ${
                 isSelected
@@ -267,13 +299,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
+        <div className="flex items-center gap-1.5 px-2 py-2 border-b border-[#152030]">
+          <label className="flex items-center gap-1.5 flex-1 min-w-0 bg-[#070b12] border border-[#1b2639] rounded px-2 py-1.5 focus-within:border-cyan-500/80">
+            <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <input
+              type="search"
+              value={treeSearch}
+              onChange={event => setTreeSearch(event.target.value)}
+              placeholder="Search files or paths"
+              aria-label="Search files or paths"
+              className="w-full min-w-0 bg-transparent text-[10.5px] font-mono text-slate-200 placeholder-slate-600 focus:outline-none"
+            />
+          </label>
+          <select
+            value={sortOrder}
+            onChange={event => setSortOrder(event.target.value as 'newest' | 'oldest')}
+            aria-label="Sort files by last update"
+            className="max-w-[88px] bg-[#101724] border border-[#1e2c44] rounded px-1.5 py-1.5 text-[9.5px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500/80"
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
+
         {/* Scrollable Tree View */}
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
-          {treeState && treeState.length > 0 ? (
-            renderTree(treeState)
+          {treeError && (
+            <div role="alert" className="px-2 py-2 text-[10px] font-mono text-rose-300 break-words">
+              {treeError}
+            </div>
+          )}
+          {visibleTree.length > 0 ? (
+            renderTree(visibleTree)
           ) : (
             <div className="p-4 text-center text-slate-500 font-mono text-[11px]">
-              No files discovered. Click refresh or configure connection.
+              {treeSearch ? 'No matching files.' : 'No files found on this connection.'}
             </div>
           )}
         </div>

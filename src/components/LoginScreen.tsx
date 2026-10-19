@@ -8,8 +8,8 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
-  const [username, setUsername] = useState('julian.putra99@gmail.com');
-  const [password, setPassword] = useState('••••••••••••');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,11 +45,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
         role: 'Site Reliability Engineer (L5)'
       });
     }
-  };
-
-  const handleQuickFill = (email: string) => {
-    setUsername(email);
-    setPassword('production-sre-key-2025');
   };
 
   return (
@@ -185,31 +180,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
             </button>
           </div>
         </form>
-
-        {/* Demo Fast Account Selector */}
-        <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-800/80 flex flex-col gap-2">
-          <span className="text-[10.5px] sm:text-[11px] text-slate-500 uppercase tracking-wider text-center">
-            Instant Demo Sign-In
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11.5px]">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('julian.putra99@gmail.com')}
-              className="px-2.5 py-1.5 rounded-md bg-[#121c2c] hover:bg-[#18263c] border border-slate-800 text-slate-300 text-left truncate transition-colors"
-            >
-              <div className="font-medium text-slate-200">Julian (Lead SRE)</div>
-              <div className="text-[10px] text-slate-500 truncate">julian.putra99@...</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('ops-oncall@logpulse.internal')}
-              className="px-2.5 py-1.5 rounded-md bg-[#121c2c] hover:bg-[#18263c] border border-slate-800 text-slate-300 text-left truncate transition-colors"
-            >
-              <div className="font-medium text-slate-200">On-Call Tier 1</div>
-              <div className="text-[10px] text-slate-500 truncate">ops-oncall@...</div>
-            </button>
-          </div>
-        </div>
 
         {/* Live Backend Connection Indicator */}
         <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] font-mono px-1">

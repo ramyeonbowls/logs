@@ -162,15 +162,14 @@ export class LogPulseAPI {
   }
 
   static async activateConnection(id: string): Promise<{ success: boolean; activeId: string; fileTree: FileTreeNode[] }> {
-    try {
-      const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}/activate`, {
-        method: 'POST'
-      });
-      if (!res.ok) throw new Error('Failed to activate connection');
-      return await res.json();
-    } catch {
-      return { success: true, activeId: id, fileTree: [] };
+    const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}/activate`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to activate connection');
     }
+    return await res.json();
   }
 
   // 3. Connection Test & Handshake Verification (Supports Remote SSH, Tunnel, and Local Folder)
@@ -206,33 +205,8 @@ export class LogPulseAPI {
         throw new Error(errorData.message || 'Connection test failed');
       }
       return await res.json();
-    } catch (err: any) {
-      if (params.type === 'local_folder') {
-        const targetPath = params.localPath || '/var/log';
-        return {
-          success: true,
-          latencyMs: 1,
-          message: `Local directory validated successfully at "${targetPath}". Read permissions verified. Discovered 5 log files.`,
-          discoveredFiles: [
-            { name: 'dpkg.log', size: '118 KB', path: `${targetPath}/dpkg.log` },
-            { name: 'alternatives.log', size: '2.5 KB', path: `${targetPath}/alternatives.log` },
-            { name: 'fontconfig.log', size: '795 B', path: `${targetPath}/fontconfig.log` },
-            { name: 'nginx-access.log', size: '1.2 MB', path: `${targetPath}/nginx/nginx-access.log` },
-            { name: 'nginx-error.log', size: '24 KB', path: `${targetPath}/nginx/nginx-error.log` }
-          ]
-        };
-      }
-
-      const latency = Math.floor(Math.random() * 8) + 12;
-      return {
-        success: true,
-        latencyMs: latency,
-        message: params.type === 'remote_tunnel'
-          ? `Remote tunnel verified on ${params.host || 'tunnel.internal'}:${params.port || 443}. E2E TLS encrypted session established.`
-          : `Connected successfully to ${params.username || 'deploy'}@${params.host || 'node-01'}:${params.port || 22}. Host key SHA256:d8Q8kZ verified. SFTP folder mounted: "${params.remotePath || '/var/log'}".`,
-        cipher: 'chacha20-poly1305@openssh.com',
-        fingerprint: 'SHA256:d8Q8kZ...9aB12'
-      };
+    } catch (err) {
+      throw err;
     }
   }
 
@@ -264,13 +238,12 @@ export class LogPulseAPI {
 
   // 4. File Tree API
   static async getFileTree(): Promise<FileTreeNode[]> {
-    try {
-      const res = await fetch(`${API_BASE}/api/files/tree`);
-      if (!res.ok) throw new Error('Failed to fetch file tree');
-      return await res.json();
-    } catch {
-      return [];
+    const res = await fetch(`${API_BASE}/api/files/tree`);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to fetch file tree');
     }
+    return await res.json();
   }
 
   // 5. Query Logs API
@@ -283,30 +256,30 @@ export class LogPulseAPI {
     caseSensitive?: boolean;
     isRegex?: boolean;
   }) {
-    try {
-      const query = new URLSearchParams();
-      if (params.fileId) query.set('fileId', params.fileId);
-      if (params.filePath || params.path) query.set('path', params.filePath || params.path || '');
-      if (params.search) query.set('search', params.search);
-      if (params.level) query.set('level', params.level);
-      if (params.caseSensitive) query.set('caseSensitive', 'true');
-      if (params.isRegex) query.set('isRegex', 'true');
+    const query = new URLSearchParams();
+    if (params.fileId) query.set('fileId', params.fileId);
+    if (params.filePath || params.path) query.set('path', params.filePath || params.path || '');
+    if (params.search) query.set('search', params.search);
+    if (params.level) query.set('level', params.level);
+    if (params.caseSensitive) query.set('caseSensitive', 'true');
+    if (params.isRegex) query.set('isRegex', 'true');
 
-      const res = await fetch(`${API_BASE}/api/logs?${query.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch logs');
-      return await res.json();
-    } catch {
-      return null;
+    const res = await fetch(`${API_BASE}/api/logs?${query.toString()}`);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to fetch remote log');
     }
+    return await res.json();
   }
 
   // 6. SSE Real-time Tailing Stream (TAIL -F)
   static subscribeLogStream(
+    filePath: string,
     onLog: (line: LogLine) => void,
     onStatusChange?: (connected: boolean) => void
   ): () => void {
     try {
-      const eventSource = new EventSource(`${API_BASE}/api/logs/stream`);
+      const eventSource = new EventSource(`${API_BASE}/api/logs/stream?path=${encodeURIComponent(filePath)}`);
 
       eventSource.onopen = () => {
         onStatusChange?.(true);
@@ -338,8 +311,8 @@ export class LogPulseAPI {
   }
 
   // 7. Download Log File URL
-  static getDownloadUrl(fileId: string): string {
-    return `${API_BASE}/api/logs/download?fileId=${encodeURIComponent(fileId)}`;
+  static getDownloadUrl(filePath: string): string {
+    return `${API_BASE}/api/logs/download?path=${encodeURIComponent(filePath)}`;
   }
 
   // 8. Metrics API

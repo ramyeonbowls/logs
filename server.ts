@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import net from 'net';
 import { DatabaseSync } from 'node:sqlite';
+import { Client, type SFTPWrapper } from 'ssh2';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,128 +82,25 @@ db.exec(`
   );
 `);
 
-// Pre-seed default connections if empty
-const countStmt = db.prepare('SELECT COUNT(*) as count FROM connections');
-const countRow = countStmt.get() as { count: number };
+const now = new Date().toISOString();
+db.prepare('INSERT OR IGNORE INTO app_settings (id, default_grammar, timezone, max_buffer_size, updated_at) VALUES (1, ?, ?, ?, ?)')
+  .run('raw_ansi', 'utc', 256, now);
 
-if (!countRow || countRow.count === 0) {
-  console.log('[SQLite] Pre-seeding initial connections (SSH, Remote Tunnel, and Local Folder)...');
-  const now = new Date().toISOString();
-  const insertStmt = db.prepare(`
-    INSERT INTO connections (
-      id, name, type, host, port, username, auth_method, password, private_key, private_key_name, passphrase, tunnel_token, remote_path, local_path, recursive, file_filter, is_connected, latency_ms, cipher, fingerprint, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  insertStmt.run(
-    'conn-prod-01',
-    'Production Node 01 (US-East)',
-    'ssh',
-    'prod-k8s-node-01.us-east.internal',
-    22,
-    'deploy',
-    'key',
-    null,
-    '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACDB7x2c6Vq5l99mB1d4k1L0P9A8Z7X4k8N1M0O1Q2R3S4AAAAh4AAAAA\n-----END OPENSSH PRIVATE KEY-----',
-    'id_ed25519_prod_sre',
-    null,
-    null,
-    '/var/log',
-    null,
-    1,
-    '*.log',
-    1,
-    14,
-    'chacha20-poly1305@openssh.com',
-    'SHA256:d8Q8kZ...9aB12',
-    now,
-    now
-  );
-
-  insertStmt.run(
-    'conn-local-sys',
-    'Host Local System Logs (/var/log)',
-    'local_folder',
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    '/var/log',
-    1,
-    '*.log',
-    1,
-    1,
-    'posix-direct-io',
-    'FS:POSIX:DIRECT_IO',
-    now,
-    now
-  );
-
-  insertStmt.run(
-    'conn-tunnel-01',
-    'Frankfurt Edge Tunnel',
-    'remote_tunnel',
-    'gw-fra-edge01.cloud.internal',
-    443,
-    'sre-admin',
-    'token',
-    null,
-    null,
-    null,
-    null,
-    'lp_tun_sec_99a81b2c7e0d3f4',
-    '/var/log/nginx',
-    null,
-    1,
-    '*.log',
-    1,
-    38,
-    'tls1.3-chacha20-poly1305',
-    'SHA256:p1L4yT...5zE33',
-    now,
-    now
-  );
-
-  insertStmt.run(
-    'conn-stage-02',
-    'Staging Cluster 02',
-    'ssh',
-    'stage-cluster-02.internal',
-    22,
-    'ops-user',
-    'key',
-    null,
-    null,
-    'id_rsa_stage',
-    null,
-    null,
-    '/var/log/services',
-    null,
-    1,
-    '*.log',
-    0,
-    42,
-    'aes256-gcm@openssh.com',
-    'SHA256:m0K2jQ...8vC91',
-    now,
-    now
-  );
-
-  db.prepare('INSERT OR REPLACE INTO active_connection (id, connection_id, updated_at) VALUES (1, ?, ?)').run('conn-prod-01', now);
-  db.prepare('INSERT OR REPLACE INTO app_settings (id, default_grammar, timezone, max_buffer_size, updated_at) VALUES (1, ?, ?, ?, ?)').run('raw_ansi', 'utc', 256, now);
-}
+const demoConnections = [
+  ['conn-prod-01', 'prod-k8s-node-01.us-east.internal'],
+  ['conn-tunnel-01', 'gw-fra-edge01.cloud.internal'],
+  ['conn-stage-02', 'stage-cluster-02.internal']
+];
+const deleteDemoConnection = db.prepare('DELETE FROM connections WHERE id = ? AND host = ?');
+for (const [id, host] of demoConnections) deleteDemoConnection.run(id, host);
+db.prepare("DELETE FROM connections WHERE id = 'conn-local-sys' AND type = 'local_folder' AND host IS NULL AND local_path = '/var/log'").run();
+db.prepare('DELETE FROM active_connection WHERE connection_id NOT IN (SELECT id FROM connections)').run();
 
 // Helper to get active connection
 function getActiveConnection() {
   const activeRow = db.prepare('SELECT connection_id FROM active_connection WHERE id = 1').get() as { connection_id: string } | undefined;
-  const activeId = activeRow?.connection_id || 'conn-prod-01';
-  const conn = db.prepare('SELECT * FROM connections WHERE id = ?').get(activeId) as any;
+  if (!activeRow) return null;
+  const conn = db.prepare('SELECT * FROM connections WHERE id = ?').get(activeRow.connection_id) as any;
   return conn || null;
 }
 
@@ -233,6 +131,7 @@ app.get(['/health', '/api/health'], (_req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.get('/api/connections', (_req: Request, res: Response) => {
   try {
+    const activeConnectionId = getActiveConnection()?.id;
     const rows = db.prepare('SELECT * FROM connections ORDER BY created_at DESC').all() as any[];
     const mapped = rows.map(r => ({
       id: r.id,
@@ -254,7 +153,7 @@ app.get('/api/connections', (_req: Request, res: Response) => {
       localPath: r.local_path,
       recursive: r.recursive === 1,
       fileFilter: r.file_filter,
-      isConnected: r.is_connected === 1,
+      isConnected: r.id === activeConnectionId,
       latencyMs: r.latency_ms,
       cipher: r.cipher,
       fingerprint: r.fingerprint,
@@ -296,7 +195,7 @@ app.post('/api/connections', (req: Request, res: Response) => {
       body.localPath || (body.type === 'local_folder' ? '/var/log' : null),
       body.recursive !== false ? 1 : 0,
       body.fileFilter || '*.log',
-      1,
+      0,
       body.latencyMs || (body.type === 'local_folder' ? 1 : 14),
       body.cipher || (body.type === 'local_folder' ? 'posix-direct-io' : 'chacha20-poly1305@openssh.com'),
       body.fingerprint || (body.type === 'local_folder' ? 'FS:POSIX:DIRECT_IO' : 'SHA256:d8Q8kZ...9aB12'),
@@ -431,7 +330,6 @@ function probeTcpServer(host: string, port: number, timeoutMs = 2500): Promise<{
     socket.on('data', (chunk) => {
       banner += chunk.toString('utf8');
       if (banner.includes('\n') && !settled) {
-        settled = true;
         const latencyMs = Math.max(1, Date.now() - start);
         socket.destroy();
         resolve({ reachable: true, latencyMs, banner: banner.trim() });
@@ -462,6 +360,111 @@ function probeTcpServer(host: string, port: number, timeoutMs = 2500): Promise<{
   });
 }
 
+function openSSHClient(config: any): Promise<Client> {
+  const authMethod = config.authMethod || config.auth_method;
+  const privateKey = config.privateKey || config.private_key;
+
+  if (authMethod === 'password' && !config.password) {
+    return Promise.reject(new Error('SSH password is required.'));
+  }
+  if (authMethod === 'key' && !privateKey) {
+    return Promise.reject(new Error('SSH private key is required.'));
+  }
+
+  const client = new Client();
+  return new Promise((resolve, reject) => {
+    let ready = false;
+    client.on('ready', () => {
+      ready = true;
+      resolve(client);
+    });
+    client.on('error', (error) => {
+      if (!ready) reject(error);
+    });
+    client.connect({
+      host: config.host,
+      port: Number(config.port) || 22,
+      username: config.username,
+      readyTimeout: 10000,
+      ...(authMethod === 'password'
+        ? { password: config.password }
+        : { privateKey, passphrase: config.passphrase })
+    });
+  });
+}
+
+async function withSSHConnection<T>(config: any, operation: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
+  const client = await openSSHClient(config);
+  try {
+    const sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+      client.sftp((error, session) => error ? reject(error) : resolve(session));
+    });
+    return await operation(sftp);
+  } finally {
+    client.end();
+  }
+}
+
+function readRemoteDirectory(sftp: SFTPWrapper, remotePath: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    sftp.readdir(remotePath, (error, entries) => error ? reject(error) : resolve(entries));
+  });
+}
+
+async function buildRemoteFileTree(sftp: SFTPWrapper, remoteRoot: string) {
+  let nodeCount = 0;
+  const maxNodes = 1000;
+
+  const readChildren = async (directory: string, depth: number): Promise<any[]> => {
+    const entries = await readRemoteDirectory(sftp, directory);
+    const children: any[] = [];
+
+    for (const entry of entries) {
+      if (nodeCount >= maxNodes) break;
+      if (entry.filename === '.' || entry.filename === '..') continue;
+
+      const entryPath = path.posix.join(directory, entry.filename);
+      if (entry.attrs.isDirectory()) {
+        const node: any = {
+          id: `ssh-${Buffer.from(entryPath).toString('hex')}`,
+          name: entry.filename,
+          path: entryPath,
+          type: 'folder',
+          modifiedAt: (entry.attrs.mtime || 0) * 1000,
+          isOpen: depth < 2,
+          children: []
+        };
+        nodeCount += 1;
+        if (depth < 20) node.children = await readChildren(entryPath, depth + 1);
+        children.push(node);
+      } else if (entry.attrs.isFile()) {
+        const size = entry.attrs.size || 0;
+        children.push({
+          id: `ssh-${Buffer.from(entryPath).toString('hex')}`,
+          name: entry.filename,
+          path: entryPath,
+          type: 'file',
+          size: size > 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${(size / 1024).toFixed(1)} KB`,
+          modifiedAt: (entry.attrs.mtime || 0) * 1000,
+          fileId: entryPath
+        });
+        nodeCount += 1;
+      }
+    }
+
+    return children.sort((left, right) => (right.modifiedAt || 0) - (left.modifiedAt || 0));
+  };
+
+  return [{
+    id: `ssh-${Buffer.from(remoteRoot).toString('hex')}`,
+    name: remoteRoot,
+    path: remoteRoot,
+    type: 'folder',
+    isOpen: true,
+    children: await readChildren(remoteRoot, 0)
+  }];
+}
+
 function isPrivateOrLocalHost(host: string): boolean {
   if (!host) return false;
   const h = host.toLowerCase();
@@ -485,7 +488,7 @@ function isPrivateOrLocalHost(host: string): boolean {
 // 4. Connection Test & Handshake Verification
 // -------------------------------------------------------------
 app.post('/api/connections/test', async (req: Request, res: Response) => {
-  const { type, host, port, username, localPath, remotePath } = req.body || {};
+  const { type, host, port, username, authMethod, password, privateKey, passphrase, localPath, remotePath } = req.body || {};
 
   if (type === 'local_folder') {
     const targetDir = localPath || '/var/log';
@@ -545,6 +548,28 @@ app.post('/api/connections/test', async (req: Request, res: Response) => {
       });
       return;
     }
+  }
+
+  if (type === 'ssh') {
+    try {
+      const startedAt = Date.now();
+      const discoveredFiles = await withSSHConnection({ host, port, username, authMethod, password, privateKey, passphrase }, async (sftp) => {
+        const tree = await buildRemoteFileTree(sftp, remotePath || '/var/log');
+        return (tree[0].children || [])
+          .filter((node: any) => node.type === 'file')
+          .map((node: any) => ({ name: node.name, size: node.size, path: node.path }));
+      });
+
+      res.json({
+        success: true,
+        latencyMs: Math.max(1, Date.now() - startedAt),
+        message: `SSH authentication succeeded and remote directory "${remotePath || '/var/log'}" is readable.`,
+        discoveredFiles
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: `SSH connection failed: ${error.message}` });
+    }
+    return;
   }
 
   // Real TCP socket probe for SSH / Remote Tunnel
@@ -630,15 +655,23 @@ app.post('/api/ssh/connect', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 5. Activate Connection & Dynamic File Tree
 // -------------------------------------------------------------
-app.post('/api/connections/:id/activate', (req: Request, res: Response) => {
+app.post('/api/connections/:id/activate', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
+    const activeConn = db.prepare('SELECT * FROM connections WHERE id = ?').get(id) as any;
+    if (!activeConn) {
+      res.status(404).json({ success: false, message: 'Connection not found.' });
+      return;
+    }
+
+    const fileTree = activeConn.type === 'ssh'
+      ? await withSSHConnection(activeConn, (sftp) => buildRemoteFileTree(sftp, activeConn.remote_path || '/var/log'))
+      : buildFileTreeForConnection(activeConn);
+
     const now = new Date().toISOString();
     db.prepare('INSERT OR REPLACE INTO active_connection (id, connection_id, updated_at) VALUES (1, ?, ?)').run(id, now);
+    db.prepare('UPDATE connections SET is_connected = 0').run();
     db.prepare('UPDATE connections SET is_connected = 1, updated_at = ? WHERE id = ?').run(now, id);
-
-    const activeConn = db.prepare('SELECT * FROM connections WHERE id = ?').get(id) as any;
-    const fileTree = buildFileTreeForConnection(activeConn);
 
     res.json({
       success: true,
@@ -647,7 +680,7 @@ app.post('/api/connections/:id/activate', (req: Request, res: Response) => {
       fileTree
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ success: false, message: `Could not activate connection: ${err.message}` });
   }
 });
 
@@ -676,6 +709,7 @@ function buildFileTreeForConnection(conn: any) {
                 path: entryPath,
                 type: 'file',
                 size: sizeStr,
+                modifiedAt: st.mtimeMs,
                 lineCount: Math.max(10, Math.floor(st.size / 60)),
                 fileId: `local-${entry}`
               });
@@ -692,6 +726,7 @@ function buildFileTreeForConnection(conn: any) {
                     path: subPath,
                     type: subSt.isDirectory() ? 'folder' : 'file',
                     size: `${(subSt.size / 1024).toFixed(1)} KB`,
+                    modifiedAt: subSt.mtimeMs,
                     fileId: `local-${sub}`
                   };
                 } catch {
@@ -704,6 +739,7 @@ function buildFileTreeForConnection(conn: any) {
                 name: entry,
                 path: entryPath,
                 type: 'folder',
+                modifiedAt: st.mtimeMs,
                 isOpen: true,
                 children: subChildren
               });
@@ -711,6 +747,7 @@ function buildFileTreeForConnection(conn: any) {
           } catch {}
         }
 
+        children.sort((left, right) => (right.modifiedAt || 0) - (left.modifiedAt || 0));
         return [
           {
             id: 'root-local-dir',
@@ -727,318 +764,253 @@ function buildFileTreeForConnection(conn: any) {
     }
   }
 
-  // Remote SSH or Remote Tunnel tree
-  const remoteRoot = conn.remote_path || '/var/log';
-  return [
-    {
-      id: 'dir-var-log',
-      name: remoteRoot,
-      path: remoteRoot,
-      type: 'folder',
-      isOpen: true,
-      children: [
-        {
-          id: 'dir-services',
-          name: 'services',
-          path: `${remoteRoot}/services`,
-          type: 'folder',
-          isOpen: true,
-          children: [
-            {
-              id: 'file-prod-api',
-              name: 'production-api-2025-05-18.log',
-              path: `${remoteRoot}/services/production-api-2025-05-18.log`,
-              type: 'file',
-              size: '48.2 MB',
-              lineCount: 124850,
-              fileId: 'production-api'
-            },
-            {
-              id: 'file-app-error',
-              name: 'app-error.log',
-              path: `${remoteRoot}/services/app-error.log`,
-              type: 'file',
-              size: '6.4 MB',
-              lineCount: 14200,
-              fileId: 'app-error'
-            },
-            {
-              id: 'file-worker',
-              name: 'worker.log',
-              path: `${remoteRoot}/services/worker.log`,
-              type: 'file',
-              size: '18 MB',
-              lineCount: 62400,
-              fileId: 'worker'
-            }
-          ]
-        },
-        {
-          id: 'dir-nginx',
-          name: 'nginx',
-          path: `${remoteRoot}/nginx`,
-          type: 'folder',
-          isOpen: true,
-          children: [
-            {
-              id: 'file-nginx-access',
-              name: 'nginx-access.log',
-              path: `${remoteRoot}/nginx/nginx-access.log`,
-              type: 'file',
-              size: '120 MB',
-              lineCount: 489200,
-              fileId: 'nginx-access'
-            }
-          ]
-        }
-      ]
-    }
-  ];
+  return [];
 }
 
-app.get('/api/files/tree', (_req: Request, res: Response) => {
-  const activeConn = getActiveConnection();
-  const tree = buildFileTreeForConnection(activeConn);
-  res.json(tree);
+app.get('/api/files/tree', async (_req: Request, res: Response) => {
+  try {
+    const activeConn = getActiveConnection();
+    if (activeConn?.type === 'ssh') {
+      const tree = await withSSHConnection(activeConn, (sftp) =>
+        buildRemoteFileTree(sftp, activeConn.remote_path || '/var/log')
+      );
+      res.json(tree);
+      return;
+    }
+
+    res.json(buildFileTreeForConnection(activeConn));
+  } catch (error: any) {
+    res.status(502).json({ message: `Could not read remote directory: ${error.message}` });
+  }
 });
+
+const MAX_LOG_BYTES = 1024 * 1024;
+const MAX_LOG_LINES = 2500;
+
+function isWithinDirectory(root: string, target: string): boolean {
+  const normalizedRoot = path.posix.resolve(root);
+  const normalizedTarget = path.posix.resolve(target);
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
+}
+
+function readStreamBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+function buildRawLogResult(contents: string, filePath: string, fileId?: string, search?: string) {
+  const sourceLines = contents.split(/\r?\n/);
+  if (sourceLines[sourceLines.length - 1] === '') sourceLines.pop();
+  const lines = sourceLines.slice(-MAX_LOG_LINES).map((line, index) => {
+    const raw = line || '';
+    return {
+      id: `${fileId || path.posix.basename(filePath)}-${index + 1}`,
+      lineNumber: index + 1,
+      timestamp: '',
+      level: 'INFO',
+      service: '',
+      message: raw,
+      raw
+    };
+  });
+  const filteredLines = search
+    ? lines.filter(line => line.raw.toLowerCase().includes(search.toLowerCase()))
+    : lines;
+
+  return {
+    fileId: fileId || filePath,
+    totalLines: lines.length,
+    stats: { errorCount: 0, warnCount: 0, infoCount: 0, debugCount: 0, fatalCount: 0 },
+    lines: filteredLines
+  };
+}
 
 // -------------------------------------------------------------
 // 6. Log Files & Real-time Live Log Stream API
 // -------------------------------------------------------------
-app.get('/api/logs', (req: Request, res: Response) => {
-  const { fileId, search, level, path: queryPath, filePath } = req.query as Record<string, string>;
+app.get('/api/logs', async (req: Request, res: Response) => {
+  const { fileId, search, path: targetPath } = req.query as Record<string, string>;
   const activeConn = getActiveConnection();
-
-  // If local file, read real lines from host filesystem
-  const targetPath = queryPath || filePath;
-  let resolvedFilePath: string | null = null;
-
-  if (targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
-    resolvedFilePath = targetPath;
-  } else if (activeConn?.type === 'local_folder') {
-    const rawName = (fileId || '').replace(/^local-/, '');
-    const directCandidate = path.join(activeConn.local_path || '/var/log', rawName);
-
-    if (fs.existsSync(directCandidate) && fs.statSync(directCandidate).isFile()) {
-      resolvedFilePath = directCandidate;
-    } else {
-      // Search recursively in local_path for the file name
-      const searchDir = (dir: string): string | null => {
-        try {
-          const items = fs.readdirSync(dir);
-          for (const item of items) {
-            const full = path.join(dir, item);
-            try {
-              const st = fs.statSync(full);
-              if (st.isFile() && (item === rawName || item === `${rawName}.log` || item.startsWith(rawName))) {
-                return full;
-              }
-              if (st.isDirectory() && !item.startsWith('.')) {
-                const sub = searchDir(full);
-                if (sub) return sub;
-              }
-            } catch {}
-          }
-        } catch {}
-        return null;
-      };
-      resolvedFilePath = searchDir(activeConn.local_path || '/var/log');
-    }
+  if (!activeConn) {
+    res.status(409).json({ message: 'Select and activate a server connection first.' });
+    return;
+  }
+  if (!targetPath) {
+    res.status(400).json({ message: 'A log file path is required.' });
+    return;
   }
 
-  if (resolvedFilePath && fs.existsSync(resolvedFilePath)) {
-    try {
-      const rawContent = fs.readFileSync(resolvedFilePath, 'utf8');
-      const allLines = rawContent.split('\n').filter(Boolean);
-      const recentLines = allLines.slice(-300);
-      const baseFilename = path.basename(resolvedFilePath);
-
-      const parsedLines = recentLines.map((line, idx) => {
-        let lvl = 'INFO';
-        if (/error|fail|exception|fatal|severe/i.test(line)) lvl = 'ERROR';
-        else if (/warn/i.test(line)) lvl = 'WARN';
-        else if (/debug|trace/i.test(line)) lvl = 'DEBUG';
-
-        return {
-          id: `line-${idx + 1}`,
-          lineNumber: allLines.length > 300 ? allLines.length - 300 + idx + 1 : idx + 1,
-          timestamp: new Date().toISOString(),
-          level: lvl,
-          service: baseFilename.replace(/\.[^/.]+$/, ''),
-          message: line
-        };
-      });
-
-      let filteredLines = parsedLines;
-      if (level) {
-        filteredLines = filteredLines.filter(l => l.level.toLowerCase() === level.toLowerCase());
-      }
-      if (search) {
-        const s = search.toLowerCase();
-        filteredLines = filteredLines.filter(l => l.message.toLowerCase().includes(s));
+  try {
+    if (activeConn.type === 'ssh') {
+      const remoteRoot = activeConn.remote_path || '/var/log';
+      if (!isWithinDirectory(remoteRoot, targetPath)) {
+        res.status(403).json({ message: 'The requested file is outside the configured remote directory.' });
+        return;
       }
 
-      res.json({
-        fileId: fileId || baseFilename,
-        totalLines: allLines.length,
-        stats: {
-          errorCount: parsedLines.filter(l => l.level === 'ERROR').length,
-          warnCount: parsedLines.filter(l => l.level === 'WARN').length,
-          infoCount: parsedLines.filter(l => l.level === 'INFO').length,
-          debugCount: parsedLines.filter(l => l.level === 'DEBUG').length,
-          fatalCount: 0
-        },
-        lines: filteredLines
+      const result = await withSSHConnection(activeConn, async sftp => {
+        const stats = await new Promise<any>((resolve, reject) => {
+          sftp.stat(targetPath, (error, attributes) => error ? reject(error) : resolve(attributes));
+        });
+        if (!stats.isFile()) throw new Error('The selected path is not a file.');
+        const start = Math.max(0, stats.size - MAX_LOG_BYTES);
+        const contents = await readStreamBuffer(sftp.createReadStream(targetPath, { start }));
+        const text = contents.toString('utf8');
+        return buildRawLogResult(start > 0 ? text.slice(text.indexOf('\n') + 1) : text, targetPath, fileId, search);
       });
+      res.json(result);
       return;
-    } catch (err: any) {
-      console.warn('Error reading local file:', err);
     }
-  }
 
-  // Production microservices logs (Parity with Go backend)
-  const sampleLines = [
-    {
-      id: 'l-1040',
-      lineNumber: 1040,
-      timestamp: '2025-05-18T14:31:45.928Z',
-      level: 'INFO',
-      service: 'db-proxy/pgpool-01',
-      traceId: 'tr_1b205a',
-      message: 'query="SELECT * FROM users WHERE tenant_id = $1" duration=2.1ms rows=1 client_ip=10.0.4.12'
-    },
-    {
-      id: 'l-1041',
-      lineNumber: 1041,
-      timestamp: '2025-05-18T14:31:47.112Z',
-      level: 'INFO',
-      service: 'cache-redis/redis-rep-01',
-      traceId: 'tr_1b205b',
-      message: 'PING replication check OK latency=0.4ms connected_clients=38'
-    },
-    {
-      id: 'l-1042',
-      lineNumber: 1042,
-      timestamp: '2025-05-18T14:31:48.005Z',
-      level: 'WARN',
-      service: 'api-gateway/gw-4a11',
-      traceId: 'tr_2c306b',
-      message: 'client_ip=198.51.100.44 Rate limiting threshold reached (92% quota used) client_id=c_99812'
-    },
-    {
-      id: 'l-1043',
-      lineNumber: 1043,
-      timestamp: '2025-05-18T14:31:49.420Z',
-      level: 'DEBUG',
-      service: 'auth-service/auth-9df82',
-      traceId: 'tr_2c306c',
-      message: 'public_key_cache valid (fingerprint=sha256:4f81ae... expires_in=310s)'
-    },
-    {
-      id: 'l-1044',
-      lineNumber: 1044,
-      timestamp: '2025-05-18T14:31:50.119Z',
-      level: 'ERROR',
-      service: 'billing-worker/bill-x12',
-      traceId: 'tr_3d407c',
-      message: 'KafkaProducerError: Broker: Not enough in-sync replicas topic=billing.events'
-    },
-    {
-      id: 'l-1048',
-      lineNumber: 1048,
-      timestamp: '2025-05-18T14:32:01.402Z',
-      level: 'ERROR',
-      service: 'auth-service/auth-9df82',
-      traceId: 'tr_8a91f0',
-      spanId: 'sp_00e72c81',
-      message: 'TokenExpiredError: jwt expired (token_age=3602s, max_age=3600s)',
-      stackTrace: [
-        'TokenExpiredError: jwt expired',
-        '    at /app/node_modules/jsonwebtoken/verify.js:152:21',
-        '    at getSecret (/app/node_modules/jsonwebtoken/verify.js:90:14)',
-        '    at Object.module.exports [as verify] (/app/src/security/jwt.ts:44:12)'
-      ]
-    },
-    {
-      id: 'l-1057',
-      lineNumber: 1057,
-      timestamp: '2025-05-18T14:32:00.912Z',
-      level: 'FATAL',
-      service: 'db-proxy/pgpool-02',
-      traceId: 'tr_8a91ec',
-      message: 'Connection pool exhausted: max_conn=100 reached. Refusing incoming socket connection'
+    if (activeConn.type === 'local_folder') {
+      const root = path.resolve(activeConn.local_path || '/var/log');
+      const resolvedPath = path.resolve(targetPath);
+      if (resolvedPath !== root && !resolvedPath.startsWith(`${root}${path.sep}`)) {
+        res.status(403).json({ message: 'The requested file is outside the configured directory.' });
+        return;
+      }
+      const stats = fs.statSync(resolvedPath);
+      if (!stats.isFile()) throw new Error('The selected path is not a file.');
+      const start = Math.max(0, stats.size - MAX_LOG_BYTES);
+      const contents = await readStreamBuffer(fs.createReadStream(resolvedPath, { start }));
+      const text = contents.toString('utf8');
+      res.json(buildRawLogResult(start > 0 ? text.slice(text.indexOf('\n') + 1) : text, resolvedPath, fileId, search));
+      return;
     }
-  ];
 
-  let filtered = sampleLines;
-  if (level) {
-    filtered = filtered.filter(l => l.level === level.toUpperCase());
+    res.status(400).json({ message: 'Log reading is supported for SSH and local folder connections.' });
+  } catch (error: any) {
+    res.status(502).json({ message: `Could not read log file: ${error.message}` });
   }
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(l => l.message.toLowerCase().includes(q) || l.service.toLowerCase().includes(q));
-  }
-
-  res.json({
-    fileId: fileId || 'production-api',
-    totalLines: 124850,
-    stats: {
-      errorCount: 34,
-      warnCount: 128,
-      infoCount: 8940,
-      debugCount: 2150,
-      fatalCount: 3
-    },
-    lines: filtered
-  });
 });
 
 // SSE Streaming endpoint
-app.get('/api/logs/stream', (_req: Request, res: Response) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
-  });
+app.get('/api/logs/stream', async (req: Request, res: Response) => {
+  const targetPath = req.query.path as string;
+  const activeConn = getActiveConnection();
+  if (!activeConn || activeConn.type !== 'ssh' || !targetPath) {
+    res.status(409).end();
+    return;
+  }
 
-  res.write('event: connected\ndata: {"status":"streaming","mode":"tail -f","engine":"SQLite SSE"}\n\n');
+  const remoteRoot = activeConn.remote_path || '/var/log';
+  if (!isWithinDirectory(remoteRoot, targetPath)) {
+    res.status(403).end();
+    return;
+  }
 
-  const templates = [
-    { level: 'INFO', service: 'db-proxy/pgpool-01', message: 'query="UPDATE users SET last_login = NOW() WHERE id = $1" duration=1.2ms' },
-    { level: 'DEBUG', service: 'cache-redis/redis-rep-01', message: 'SETEX "session:usr_99" 3600 "active" -> OK' },
-    { level: 'INFO', service: 'api-gateway/gw-4a11', message: 'HTTP/2.0 "GET /v1/telemetry/health" 200 OK latency=1.8ms' },
-    { level: 'WARN', service: 'api-gateway/gw-4a11', message: 'client_ip=203.0.113.12 Rate limit 80% consumption threshold reached' },
-    { level: 'INFO', service: 'worker/indexing-pool', message: 'Elasticsearch bulk indexing committed 450 documents in 24ms' },
-    { level: 'ERROR', service: 'auth-service/auth-9df82', message: 'SignatureVerificationFailed: Invalid cryptographic signature for JWT token header' }
-  ];
+  let client: Client | undefined;
+  try {
+    client = await openSSHClient(activeConn);
+    const sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+      client!.sftp((error, session) => error ? reject(error) : resolve(session));
+    });
+    const initialStats = await new Promise<any>((resolve, reject) => {
+      sftp.stat(targetPath, (error, attributes) => error ? reject(error) : resolve(attributes));
+    });
+    if (!initialStats.isFile()) throw new Error('The selected path is not a file.');
 
-  let lineCount = 1065;
-  const timer = setInterval(() => {
-    lineCount++;
-    const tpl = templates[Math.floor(Math.random() * templates.length)];
-    const logData = {
-      id: `stream-${Date.now()}`,
-      lineNumber: lineCount,
-      timestamp: new Date().toISOString(),
-      level: tpl.level,
-      service: tpl.service,
-      traceId: `tr_${Math.random().toString(36).substring(2, 8)}`,
-      spanId: `sp_${Math.random().toString(36).substring(2, 10)}`,
-      message: tpl.message
-    };
-    res.write(`event: log\ndata: ${JSON.stringify(logData)}\n\n`);
-  }, 3500);
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.write('event: connected\ndata: {"status":"streaming"}\n\n');
 
-  _req.on('close', () => clearInterval(timer));
+    let offset = initialStats.size;
+    let polling = false;
+    const timer = setInterval(async () => {
+      if (polling || res.destroyed) return;
+      polling = true;
+      try {
+        const stats = await new Promise<any>((resolve, reject) => {
+          sftp.stat(targetPath, (error, attributes) => error ? reject(error) : resolve(attributes));
+        });
+        if (!stats.isFile()) return;
+        if (stats.size < offset) offset = 0;
+        if (stats.size <= offset) return;
+
+        const start = offset;
+        const contents = await readStreamBuffer(sftp.createReadStream(targetPath, { start, end: stats.size - 1 }));
+        offset = stats.size;
+        contents.toString('utf8').split(/\r?\n/).filter(Boolean).forEach((raw, index) => {
+          res.write(`event: log\ndata: ${JSON.stringify({
+            id: `${Date.now()}-${index}`,
+            lineNumber: offset,
+            timestamp: '',
+            level: 'INFO',
+            service: '',
+            message: raw,
+            raw
+          })}\n\n`);
+        });
+      } catch (error: any) {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: error.message })}\n\n`);
+        clearInterval(timer);
+        client?.end();
+        res.end();
+      } finally {
+        polling = false;
+      }
+    }, 2000);
+
+    req.once('close', () => {
+      clearInterval(timer);
+      client?.end();
+    });
+  } catch (error: any) {
+    client?.end();
+    if (!res.headersSent) res.status(502).json({ message: `Could not tail remote log: ${error.message}` });
+    else res.end();
+  }
 });
 
 // Download log file
-app.get('/api/logs/download', (req: Request, res: Response) => {
-  const fileId = (req.query.fileId as string) || 'production-api';
-  res.setHeader('Content-Disposition', `attachment; filename="${fileId}.log"`);
+app.get('/api/logs/download', async (req: Request, res: Response) => {
+  const targetPath = req.query.path as string;
+  const activeConn = getActiveConnection();
+  if (!activeConn || !targetPath) {
+    res.status(409).json({ message: 'Select a connection and file first.' });
+    return;
+  }
+
+  const root = activeConn.type === 'ssh' ? activeConn.remote_path || '/var/log' : activeConn.local_path || '/var/log';
+  if (!isWithinDirectory(root, targetPath)) {
+    res.status(403).json({ message: 'The requested file is outside the configured directory.' });
+    return;
+  }
+
+  res.setHeader('Content-Disposition', `attachment; filename="${path.posix.basename(targetPath)}"`);
   res.setHeader('Content-Type', 'text/plain');
-  res.send(`=== LogPulse Observability Log Dump: ${fileId} ===\nExported: ${new Date().toISOString()}\n\n2025-05-18T14:31:45.928Z [INFO] [db-proxy] query="SELECT * FROM users"\n2025-05-18T14:32:01.402Z [ERROR] [auth-service] TokenExpiredError: jwt expired\n`);
+  if (activeConn.type === 'local_folder') {
+    fs.createReadStream(targetPath).on('error', () => res.destroy()).pipe(res);
+    return;
+  }
+
+  try {
+    const client = await openSSHClient(activeConn);
+    client.sftp((error, sftp) => {
+      if (error) {
+        client.end();
+        res.status(502).end(error.message);
+        return;
+      }
+      sftp.createReadStream(targetPath)
+        .on('error', () => {
+          client.end();
+          res.destroy();
+        })
+        .on('close', () => client.end())
+        .pipe(res);
+    });
+  } catch (error: any) {
+    res.status(502).json({ message: `Could not download remote log: ${error.message}` });
+  }
 });
 
 // Telemetry metrics

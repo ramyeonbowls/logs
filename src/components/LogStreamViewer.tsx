@@ -10,6 +10,7 @@ interface LogStreamViewerProps {
   isWrapText: boolean;
   fontSize: number;
   isFollowTail: boolean;
+  loadError?: string | null;
 }
 
 export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
@@ -21,6 +22,7 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
   isWrapText,
   fontSize,
   isFollowTail,
+  loadError,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -102,6 +104,11 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
         style={{ fontSize: `${fontSize}px`, lineHeight: `${fontSize * 1.55}px` }}
       >
         <div className="min-w-fit">
+          {lines.length === 0 && (
+            <div role={loadError ? 'alert' : undefined} className="p-4 text-slate-400 text-xs">
+              {loadError || 'No log lines in this file.'}
+            </div>
+          )}
           {lines.map((line) => {
             const isSelected = selectedLineNumber === line.lineNumber;
 
@@ -128,32 +135,26 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                       isWrapText ? 'break-words' : 'whitespace-pre'
                     }`}
                   >
-                    {/* Timestamp */}
-                    <span className="text-slate-400">{line.timestamp}</span>
-
-                    {/* Level */}
-                    <span className="mx-1">{renderLevelBadge(line.level)}</span>
-
-                    {/* Service tag */}
-                    <span className="text-cyan-400/90 font-medium">[{line.service}]</span>
-
-                    {/* Trace & Span ID */}
-                    {line.traceId && (
-                      <span className="text-slate-400 ml-1">
-                        trace_id=<span className="text-cyan-300">{highlightSearch(line.traceId)}</span>
-                      </span>
+                    {line.raw !== undefined ? (
+                      <span className="text-slate-200">{highlightSearch(line.raw)}</span>
+                    ) : (
+                      <>
+                        <span className="text-slate-400">{line.timestamp}</span>
+                        <span className="mx-1">{renderLevelBadge(line.level)}</span>
+                        <span className="text-cyan-400/90 font-medium">[{line.service}]</span>
+                        {line.traceId && (
+                          <span className="text-slate-400 ml-1">
+                            trace_id=<span className="text-cyan-300">{highlightSearch(line.traceId)}</span>
+                          </span>
+                        )}
+                        {line.spanId && (
+                          <span className="text-slate-400 ml-1.5">
+                            span_id=<span className="text-sky-300">{highlightSearch(line.spanId)}</span>
+                          </span>
+                        )}
+                        <span className="text-slate-200 ml-1.5">{highlightSearch(line.message)}</span>
+                      </>
                     )}
-
-                    {line.spanId && (
-                      <span className="text-slate-400 ml-1.5">
-                        span_id=<span className="text-sky-300">{highlightSearch(line.spanId)}</span>
-                      </span>
-                    )}
-
-                    {/* Message */}
-                    <span className="text-slate-200 ml-1.5">
-                      {highlightSearch(line.message)}
-                    </span>
                   </div>
                 </div>
 

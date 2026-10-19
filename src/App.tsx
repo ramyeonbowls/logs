@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { SAMPLE_FILES, MOCK_NEW_STREAM_LINES } from './data/sampleLogs';
-import { DEFAULT_SSH_CONNECTIONS, INITIAL_FILE_TREE } from './data/fileTreeData';
 import { LogFile, LogLevel, LogLine } from './types/log';
 import { SSHConnection, FileTreeNode } from './types/ssh';
 import { LogPulseAPI, BackendStatus } from './services/api';
@@ -18,6 +16,26 @@ import { GrepViewModal } from './components/GrepViewModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SSHConnectionModal } from './components/SSHConnectionModal';
 import { ConnectionSettingsModal } from './components/ConnectionSettingsModal';
+
+const EMPTY_CONNECTION: SSHConnection = {
+  id: '',
+  name: 'No connection selected',
+  type: 'ssh',
+  isConnected: false,
+  latencyMs: 0
+};
+
+const EMPTY_LOG_FILE: LogFile = {
+  id: '',
+  path: '',
+  filename: 'No file selected',
+  size: '0 B',
+  lineCount: 0,
+  encoding: 'UTF-8',
+  lineEnding: 'LF',
+  stats: { errorCount: 0, warnCount: 0, infoCount: 0, debugCount: 0, fatalCount: 0 },
+  lines: []
+};
 
 function findFirstFileNode(nodes: FileTreeNode[]): FileTreeNode | null {
   for (const node of nodes) {
@@ -45,17 +63,18 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
 
   // SSH Connections & Active Connection
-  const [sshConnections, setSshConnections] = useState<SSHConnection[]>(DEFAULT_SSH_CONNECTIONS);
-  const [activeSSHId, setActiveSSHId] = useState<string>('conn-prod-01');
+  const [sshConnections, setSshConnections] = useState<SSHConnection[]>([]);
+  const [activeSSHId, setActiveSSHId] = useState<string>('');
   const [isSSHModalOpen, setIsSSHModalOpen] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // File Tree State
-  const [fileTree, setFileTree] = useState<FileTreeNode[]>(INITIAL_FILE_TREE);
+  const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
 
   // Files data & current file selection
-  const [files, setFiles] = useState<LogFile[]>(SAMPLE_FILES);
-  const [currentFileId, setCurrentFileId] = useState<string>('production-api');
+  const [files, setFiles] = useState<LogFile[]>([]);
+  const [currentFileId, setCurrentFileId] = useState<string>('');
+  const [logError, setLogError] = useState<string | null>(null);
 
   // Tailing & Streaming
   const [isTailing, setIsTailing] = useState<boolean>(true);
@@ -91,28 +110,19 @@ export default function App() {
 
         // Fetch backend SSH connections
         const conns = await LogPulseAPI.getSSHConnections();
-        if (mounted && conns && conns.length > 0) {
+        if (mounted) {
           setSshConnections(conns);
+          setActiveSSHId(conns.find(connection => connection.isConnected)?.id || '');
         }
 
         // Fetch backend File Tree
         const tree = await LogPulseAPI.getFileTree();
-        if (mounted && tree && tree.length > 0) {
+        if (mounted) {
           setFileTree(tree);
         }
 
-        // Fetch initial logs from backend for production-api
-        const logsRes = await LogPulseAPI.getLogs({ fileId: 'production-api' });
-        if (mounted && logsRes && logsRes.lines && logsRes.lines.length > 0) {
-          setFiles(prev => prev.map(f => f.id === 'production-api' ? {
-            ...f,
-            lines: logsRes.lines,
-            lineCount: logsRes.totalLines,
-            stats: logsRes.stats
-          } : f));
-        }
       } catch (err) {
-        console.warn('Backend sync failed, running with local caches:', err);
+        console.warn('Backend sync failed:', err);
       }
     }
 
@@ -131,12 +141,12 @@ export default function App() {
 
   // Active SSH object
   const activeConnection = useMemo(() => {
-    return sshConnections.find(c => c.id === activeSSHId) || sshConnections[0];
+    return sshConnections.find(c => c.id === activeSSHId) || EMPTY_CONNECTION;
   }, [sshConnections, activeSSHId]);
 
   // Current active log file object
   const currentFile = useMemo(() => {
-    return files.find(f => f.id === currentFileId) || files[0];
+    return files.find(f => f.id === currentFileId) || EMPTY_LOG_FILE;
   }, [files, currentFileId]);
 
   // Selected Log Line object for inspector
@@ -145,30 +155,20 @@ export default function App() {
     return currentFile.lines.find(l => l.lineNumber === selectedLineNumber) || currentFile.lines[0] || null;
   }, [currentFile, selectedLineNumber]);
 
-  // Real-time tailing via SSE from backend, with local fallback
+  // Real-time tailing from the selected remote file
   useEffect(() => {
-    if (!isTailing || currentFileId !== 'production-api') return;
+    if (!isTailing || !currentFile.path) return;
 
-    let sseActive = false;
-
-    // Connect to Server-Sent Events (SSE) from the backend
-    const unsubscribeSSE = LogPulseAPI.subscribeLogStream(
+    return LogPulseAPI.subscribeLogStream(
+      currentFile.path,
       (newLine: LogLine) => {
-        sseActive = true;
         setFiles(prevFiles =>
           prevFiles.map(file => {
-            if (file.id !== 'production-api') return file;
+            if (file.path !== currentFile.path) return file;
 
             return {
               ...file,
               lineCount: file.lineCount + 1,
-              stats: {
-                ...file.stats,
-                errorCount: file.stats.errorCount + (newLine.level === 'ERROR' ? 1 : 0),
-                warnCount: file.stats.warnCount + (newLine.level === 'WARN' ? 1 : 0),
-                infoCount: file.stats.infoCount + (newLine.level === 'INFO' ? 1 : 0),
-                debugCount: file.stats.debugCount + (newLine.level === 'DEBUG' ? 1 : 0),
-              },
               lines: [...file.lines, newLine]
             };
           })
@@ -178,157 +178,36 @@ export default function App() {
         setBackendStatus(prev => prev ? { ...prev, sseActive: connected } : null);
       }
     );
-
-    // Backup timer fallback in case SSE is interrupted or backend is paused
-    let mockIndex = 0;
-    const interval = setInterval(() => {
-      if (sseActive) return; // SSE is delivering live data, no need for local mock
-
-      const template = MOCK_NEW_STREAM_LINES[mockIndex % MOCK_NEW_STREAM_LINES.length];
-      mockIndex++;
-
-      setFiles(prevFiles =>
-        prevFiles.map(file => {
-          if (file.id !== 'production-api') return file;
-
-          const lastLine = file.lines[file.lines.length - 1];
-          const nextLineNumber = (lastLine ? lastLine.lineNumber + (lastLine.stackTrace ? lastLine.stackTrace.length + 1 : 1) : 1068);
-
-          const newLine: LogLine = {
-            id: `stream-${Date.now()}-${Math.random()}`,
-            lineNumber: nextLineNumber,
-            timestamp: new Date().toISOString(),
-            level: template.level,
-            service: template.service,
-            traceId: `tr_${Math.random().toString(36).substring(2, 8)}`,
-            spanId: `sp_${Math.random().toString(36).substring(2, 10)}`,
-            message: template.message,
-            attributes: template.attributes,
-            stackTrace: template.stackTrace
-          };
-
-          return {
-            ...file,
-            lineCount: file.lineCount + 1,
-            stats: {
-              ...file.stats,
-              errorCount: file.stats.errorCount + (template.level === 'ERROR' ? 1 : 0),
-              warnCount: file.stats.warnCount + (template.level === 'WARN' ? 1 : 0),
-              infoCount: file.stats.infoCount + (template.level === 'INFO' ? 1 : 0),
-              debugCount: file.stats.debugCount + (template.level === 'DEBUG' ? 1 : 0),
-            },
-            lines: [...file.lines, newLine]
-          };
-        })
-      );
-    }, 4500);
-
-    return () => {
-      unsubscribeSSE();
-      clearInterval(interval);
-    };
-  }, [isTailing, currentFileId]);
+  }, [isTailing, currentFile.path]);
 
   // Handle clicking a node in the File Tree
   const handleSelectTreeNode = async (node: FileTreeNode) => {
     if (node.type !== 'file') return;
 
-    // Check if backend has logs for this file
-    if (node.fileId || node.path) {
-      try {
-        const backendLog = await LogPulseAPI.getLogs({ fileId: node.fileId, filePath: node.path });
-        if (backendLog && backendLog.lines && backendLog.lines.length > 0) {
-          const targetId = node.fileId || node.id;
-          setFiles(prev => {
-            const exists = prev.find(f => f.id === targetId || f.path === node.path);
-            if (exists) {
-              return prev.map(f => (f.id === targetId || f.path === node.path) ? {
-                ...f,
-                lines: backendLog.lines,
-                lineCount: backendLog.totalLines,
-                stats: backendLog.stats
-              } : f);
-            } else {
-              const newFile: LogFile = {
-                id: node.fileId!,
-                path: node.path,
-                filename: node.name,
-                size: node.size || '12.4 MB',
-                lineCount: backendLog.totalLines,
-                encoding: 'UTF-8',
-                lineEnding: 'LF (Unix)',
-                stats: backendLog.stats,
-                lines: backendLog.lines
-              };
-              return [newFile, ...prev];
-            }
-          });
-          setCurrentFileId(targetId);
-          setSelectedLineNumber(backendLog.lines[0]?.lineNumber || 1);
-          return;
-        }
-      } catch (err) {
-        console.warn('Backend getLogs error:', err);
-      }
+    const fileId = node.fileId || node.id;
+    setLogError(null);
+    try {
+      const result = await LogPulseAPI.getLogs({ fileId, filePath: node.path });
+      const logFile: LogFile = {
+        id: fileId,
+        path: node.path,
+        filename: node.name,
+        size: node.size || 'Unknown',
+        lineCount: result.totalLines,
+        encoding: 'UTF-8',
+        lineEnding: 'LF',
+        stats: result.stats,
+        lines: result.lines
+      };
+      setFiles(prev => [logFile, ...prev.filter(file => file.path !== node.path)]);
+      setCurrentFileId(fileId);
+      setSelectedLineNumber(result.lines[0]?.lineNumber || null);
+    } catch (error: any) {
+      setLogError(error.message || 'Could not read remote log file.');
+      setCurrentFileId('');
+      setSelectedLineNumber(null);
+      setFiles([]);
     }
-
-    // Check if file already exists in files list
-    const existing = files.find(f => f.id === node.fileId || f.path === node.path);
-    if (existing) {
-      setCurrentFileId(existing.id);
-      setSelectedLineNumber(existing.lines[0]?.lineNumber || 1048);
-      return;
-    }
-
-    // Otherwise create dynamic file for this tree node
-    const newLogFile: LogFile = {
-      id: node.id,
-      path: node.path,
-      filename: node.name,
-      size: node.size || '4.2 MB',
-      lineCount: node.lineCount || 12000,
-      encoding: 'UTF-8',
-      lineEnding: 'LF (Unix)',
-      stats: {
-        errorCount: 8,
-        warnCount: 24,
-        infoCount: 1420,
-        debugCount: 310,
-        fatalCount: 0
-      },
-      lines: [
-        {
-          id: `${node.id}-1`,
-          lineNumber: 1,
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          service: node.name.replace('.log', ''),
-          message: `Mounted remote SSH file ${node.path} via SFTP stream (${activeConnection.host})`,
-          attributes: { host: activeConnection.host || activeConnection.name, user: activeConnection.username || 'local' }
-        },
-        {
-          id: `${node.id}-2`,
-          lineNumber: 2,
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          service: node.name.replace('.log', ''),
-          message: `Read buffer allocated: 64KB chunk size. Cipher: ${activeConnection.cipher || 'direct-io'}`,
-          attributes: { latency: `${activeConnection.latencyMs}ms` }
-        },
-        {
-          id: `${node.id}-3`,
-          lineNumber: 3,
-          timestamp: new Date().toISOString(),
-          level: 'DEBUG',
-          service: node.name.replace('.log', ''),
-          message: `Active file descriptor synchronized. Ready for tailing.`,
-        }
-      ]
-    };
-
-    setFiles(prev => [newLogFile, ...prev]);
-    setCurrentFileId(newLogFile.id);
-    setSelectedLineNumber(1);
   };
 
   // Handle saving SSH connection
@@ -432,16 +311,11 @@ export default function App() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // Download raw file
   const handleDownloadFile = () => {
-    const content = currentFile.lines.map(l => `${l.lineNumber} ${l.timestamp} [${l.level}] [${l.service}] ${l.message}`).join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = LogPulseAPI.getDownloadUrl(currentFile.path);
     a.download = currentFile.filename;
     a.click();
-    URL.revokeObjectURL(url);
   };
 
   // Scroll shortcuts
@@ -547,7 +421,7 @@ export default function App() {
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           onRefreshTree={async () => {
             const tree = await LogPulseAPI.getFileTree();
-            if (tree && tree.length > 0) setFileTree(tree);
+            setFileTree(tree);
           }}
         />
 
@@ -598,6 +472,7 @@ export default function App() {
           {/* Terminal Log Stream View */}
           <LogStreamViewer
             lines={filteredLines}
+            loadError={logError}
             selectedLineNumber={selectedLineNumber}
             onSelectLine={(num) => {
               setSelectedLineNumber(num);
@@ -629,20 +504,23 @@ export default function App() {
         activeConnectionId={activeSSHId}
         onSelectConnection={async (connId, updatedTree) => {
           setActiveSSHId(connId);
+          setFiles([]);
+          setCurrentFileId('');
+          setSelectedLineNumber(null);
+          setLogError(null);
           try {
-            const act = await LogPulseAPI.activateConnection(connId);
-            const newTree = (updatedTree && updatedTree.length > 0)
+            const newTree = updatedTree?.length
               ? updatedTree
-              : (act.fileTree && act.fileTree.length > 0 ? act.fileTree : await LogPulseAPI.getFileTree());
-            if (newTree && newTree.length > 0) {
-              setFileTree(newTree);
-              const first = findFirstFileNode(newTree);
-              if (first) {
-                handleSelectTreeNode(first);
-              }
+              : (await LogPulseAPI.activateConnection(connId)).fileTree;
+            setFileTree(newTree);
+            const first = findFirstFileNode(newTree);
+            if (first) {
+              handleSelectTreeNode(first);
             }
           } catch (err) {
             console.warn('Activate connection error:', err);
+            setFileTree([]);
+            throw err;
           }
         }}
         onRefreshConnections={async () => {

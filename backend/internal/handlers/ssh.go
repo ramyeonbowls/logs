@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -11,38 +10,14 @@ import (
 	"logpulse-backend/internal/store"
 )
 
-// HandleSSHTest performs simulated cryptographic handshake, measures round-trip latency, and validates remote folder
+// HandleSSHTest reports that SSH is not implemented by the standalone Go backend.
 func HandleSSHTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req models.SSHTestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-		return
-	}
-
-	if req.Host == "" {
-		http.Error(w, "Host is required", http.StatusBadRequest)
-		return
-	}
-
-	// Simulate network roundtrip latency (12ms - 22ms)
-	latency := 12 + rand.Intn(10)
-	time.Sleep(time.Duration(latency) * time.Millisecond)
-
-	resp := models.SSHTestResponse{
-		Success:   true,
-		LatencyMs: latency,
-		Message:   fmt.Sprintf("Connected successfully to %s@%s:%d. Host key SHA256:d8Q8kZ verified. SFTP folder mounted: \"%s\".", req.Username, req.Host, req.Port, req.RemotePath),
-		Cipher:    "chacha20-poly1305@openssh.com",
-		HostKey:   "SHA256:d8Q8kZ...9aB12",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	http.Error(w, "SSH/SFTP is available through the integrated Node server, not this Go backend.", http.StatusNotImplemented)
 }
 
 // HandleGetSSHConnections returns all configured SSH hosts
@@ -92,6 +67,6 @@ func HandleSaveSSHConnection(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":    true,
 		"connection": conn,
-		"message":    fmt.Sprintf("SSH session mounted at %s", conn.RemotePath),
+		"message":    "Connection saved. SSH/SFTP mounting is not implemented in this Go backend.",
 	})
 }
