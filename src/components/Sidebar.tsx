@@ -340,24 +340,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Memory & SQLite Buffer Widget */}
-      <div className="p-2.5 border-t border-[#182233] bg-[#070a10] shrink-0">
-        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
+      <div className="p-1 border-t border-[#182233] bg-[#070a10] shrink-0">
+        {/* <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
           <span className="tracking-wider uppercase font-semibold text-slate-500 flex items-center gap-1">
             <HardDrive className="w-3 h-3 text-cyan-500" />
             BUFFER &amp; STORAGE
           </span>
           <span className="text-slate-300 font-medium">48.2 MB / 256 MB</span>
-        </div>
+        </div> */}
 
         {/* Progress bar with cyan indicator */}
-        <div className="w-full h-1.5 bg-[#141d2c] rounded-full overflow-hidden">
+        {/* <div className="w-full h-1.5 bg-[#141d2c] rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 rounded-full"
             style={{ width: `${(48.2 / 256) * 100}%` }}
           />
-        </div>
+        </div> */}
 
-        <div className="mt-1.5 flex items-center justify-between text-[9.5px] font-mono text-slate-500">
+        <div className="mt-1 flex items-center justify-between text-[9.5px] font-mono text-slate-500">
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>SQLite: data/logpulse.sqlite</span>
