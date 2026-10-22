@@ -13,6 +13,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
 
@@ -22,28 +23,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim() || !password.trim()) return;
 
     setIsLoading(true);
+    setErrorMessage('');
     try {
-      const resp = await LogPulseAPI.login(username, password);
-      setIsLoading(false);
-      if (resp && resp.user) {
-        onSignIn(resp.user);
-      } else {
-        onSignIn({
-          name: username.includes('@') ? username.split('@')[0] : username,
-          email: username.includes('@') ? username : `${username}@logpulse.internal`,
-          role: 'Site Reliability Engineer (L5)'
-        });
-      }
-    } catch {
-      setIsLoading(false);
-      onSignIn({
-        name: username.includes('@') ? username.split('@')[0] : username,
-        email: username.includes('@') ? username : `${username}@logpulse.internal`,
-        role: 'Site Reliability Engineer (L5)'
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
       });
+
+      const data = await resp.json();
+
+      if (!resp.ok || !data.success) {
+        setErrorMessage(data.message || 'Invalid username or password.');
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(false);
+      onSignIn(data.user);
+    } catch {
+      setErrorMessage('Cannot connect to server. Please try again.');
+      setIsLoading(false);
     }
   };
 
@@ -106,7 +109,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
                 id="login-username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setErrorMessage(''); }}
                 placeholder="username or email"
                 required
                 className="w-full pl-10 pr-3 py-2 sm:py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[12.5px] sm:text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
@@ -136,7 +139,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setErrorMessage(''); }}
                 placeholder="••••••••••••"
                 required
                 className="w-full pl-10 pr-10 py-2 sm:py-2.5 rounded-lg bg-[#080d16] border border-[#1b2638] text-white text-[12.5px] sm:text-[13px] placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
@@ -164,6 +167,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
               <span>Keep signed in</span>
             </label>
           </div>
+
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-[12px]">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="pt-2">

@@ -4,8 +4,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import net from 'net';
+import crypto from 'crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Client, type SFTPWrapper } from 'ssh2';
+
+// --------------- Password hashing helpers (scrypt) ---------------
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(':');
+  if (!salt || !hash) return false;
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(hash, 'hex'));
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,6 +100,42 @@ db.exec(`
 const now = new Date().toISOString();
 db.prepare('INSERT OR IGNORE INTO app_settings (id, default_grammar, timezone, max_buffer_size, updated_at) VALUES (1, ?, ?, ?, ?)')
   .run('raw_ansi', 'utc', 256, now);
+
+// Create users table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'Site Reliability Engineer (L5)',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+// Seed default admin user if no users exist
+const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
+if (userCount === 0) {
+  const defaultPassword = process.env.APP_PASSWORD || 'admin';
+  const defaultUsername = process.env.APP_USERNAME || 'admin';
+  db.prepare(`
+    INSERT INTO users (id, username, email, password_hash, name, role, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(
+    'usr-1',
+    defaultUsername,
+    defaultUsername.includes('@') ? defaultUsername : `${defaultUsername}@logpulse.internal`,
+    hashPassword(defaultPassword),
+    defaultUsername.charAt(0).toUpperCase() + defaultUsername.slice(1),
+    'Administrator',
+    now,
+    now
+  );
+  console.log(`[Auth] Default user created: ${defaultUsername}`);
+}
 
 const demoConnections = [
   ['conn-prod-01', 'prod-k8s-node-01.us-east.internal'],
@@ -1051,29 +1102,137 @@ app.post('/api/settings', (req: Request, res: Response) => {
 
 // Auth API
 app.post('/api/auth/login', (req: Request, res: Response) => {
-  const username = req.body?.username || 'julian.putra99@gmail.com';
-  const displayName = username.includes('@') ? username.split('@')[0] : username;
-  res.json({
-    success: true,
-    token: 'jwt_sqlite_session_' + Date.now(),
-    user: {
-      id: 'usr-99',
-      username,
-      email: username,
-      name: displayName.charAt(0).toUpperCase() + displayName.slice(1),
-      role: 'Site Reliability Engineer (L5)'
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    res.status(400).json({ success: false, message: 'Username and password are required.' });
+    return;
+  }
+
+  try {
+    // Lookup by username or email
+    const user = db.prepare(
+      'SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = 1'
+    ).get(username, username) as any;
+
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      res.status(401).json({ success: false, message: 'Invalid username or password.' });
+      return;
     }
-  });
+
+    res.json({
+      success: true,
+      token: 'jwt_sqlite_session_' + Date.now(),
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
 });
 
-app.get('/api/auth/me', (_req: Request, res: Response) => {
-  res.json({
-    id: 'usr-99',
-    username: 'julian.putra99@gmail.com',
-    email: 'julian.putra99@gmail.com',
-    name: 'Julian Putra',
-    role: 'Site Reliability Engineer (L5)'
-  });
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  // In a real app this would validate a JWT; for now return first active user
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE is_active = 1 LIMIT 1').get() as any;
+    if (!user) {
+      res.status(401).json({ message: 'Not authenticated.' });
+      return;
+    }
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// User management API
+app.get('/api/users', (_req: Request, res: Response) => {
+  try {
+    const users = db.prepare('SELECT id, username, email, name, role, is_active, created_at, updated_at FROM users ORDER BY created_at').all();
+    res.json(users);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/users', (req: Request, res: Response) => {
+  const { username, email, password, name, role } = req.body || {};
+  if (!username || !password) {
+    res.status(400).json({ success: false, message: 'Username and password are required.' });
+    return;
+  }
+  try {
+    const existing = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email || username) as any;
+    if (existing) {
+      res.status(409).json({ success: false, message: 'Username or email already exists.' });
+      return;
+    }
+    const id = `usr-${Date.now()}`;
+    const ts = new Date().toISOString();
+    const resolvedEmail = email || (username.includes('@') ? username : `${username}@logpulse.internal`);
+    const resolvedName = name || (username.charAt(0).toUpperCase() + username.slice(1));
+    db.prepare(`
+      INSERT INTO users (id, username, email, password_hash, name, role, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(id, username, resolvedEmail, hashPassword(password), resolvedName, role || 'Site Reliability Engineer (L5)', ts, ts);
+    res.status(201).json({ success: true, user: { id, username, email: resolvedEmail, name: resolvedName, role } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, email, role, password, is_active } = req.body || {};
+  try {
+    const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'User not found.' });
+      return;
+    }
+    const ts = new Date().toISOString();
+    const newHash = password ? hashPassword(password) : existing.password_hash;
+    db.prepare(`
+      UPDATE users SET name = ?, email = ?, role = ?, password_hash = ?, is_active = ?, updated_at = ? WHERE id = ?
+    `).run(
+      name ?? existing.name,
+      email ?? existing.email,
+      role ?? existing.role,
+      newHash,
+      is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active,
+      ts,
+      id
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id) as any;
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'User not found.' });
+      return;
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // -------------------------------------------------------------

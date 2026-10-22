@@ -50,13 +50,24 @@ function findFirstFileNode(nodes: FileTreeNode[]): FileTreeNode | null {
 
 export default function App() {
   // Current screen mode: 'login' | 'workspace'
-  const [currentScreen, setCurrentScreen] = useState<'login' | 'workspace'>('workspace');
+  // Check sessionStorage for existing session on mount
+  const [currentScreen, setCurrentScreen] = useState<'login' | 'workspace'>(() => {
+    try {
+      const session = sessionStorage.getItem('logpulse_session');
+      return session ? 'workspace' : 'login';
+    } catch {
+      return 'login';
+    }
+  });
 
   // Authenticated user state
-  const [currentUser, setCurrentUser] = useState({
-    name: 'Julian Putra',
-    email: 'julian.putra99@gmail.com',
-    role: 'Site Reliability Engineer (L5)'
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const session = sessionStorage.getItem('logpulse_session');
+      return session ? JSON.parse(session) : { name: '', email: '', role: '' };
+    } catch {
+      return { name: '', email: '', role: '' };
+    }
   });
 
   // Backend Connection Status
@@ -372,17 +383,11 @@ export default function App() {
       <div className="relative w-screen h-screen">
         <LoginScreen
           onSignIn={(user) => {
+            try { sessionStorage.setItem('logpulse_session', JSON.stringify(user)); } catch {}
             setCurrentUser(user);
             setCurrentScreen('workspace');
           }}
         />
-        {/* Floating switch button to instantly view workspace */}
-        <button
-          onClick={() => setCurrentScreen('workspace')}
-          className="fixed bottom-4 right-4 z-50 px-3 py-1.5 rounded-lg bg-[#141e30] hover:bg-[#1c2c46] border border-[#233550] text-cyan-300 text-xs shadow-xl cursor-pointer flex items-center gap-1.5 transition-colors font-mono"
-        >
-          <span>Skip to Log Viewer Screen →</span>
-        </button>
       </div>
     );
   }
@@ -395,7 +400,10 @@ export default function App() {
         currentFile={currentFile}
         isTailing={isTailing}
         onToggleTail={() => setIsTailing(!isTailing)}
-        onSignOut={() => setCurrentScreen('login')}
+        onSignOut={() => {
+            try { sessionStorage.removeItem('logpulse_session'); } catch {}
+            setCurrentScreen('login');
+          }}
         user={currentUser}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         isMobileSidebarOpen={isMobileSidebarOpen}
