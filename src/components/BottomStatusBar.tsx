@@ -21,9 +21,9 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
   const percentage = ((currentLine / currentFile.lineCount) * 100).toFixed(1);
 
   return (
-    <footer className="h-7 bg-[#080c14] border-t border-[#172132] px-2.5 sm:px-3 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 select-none font-mono shrink-0 overflow-x-auto gap-2">
+    <footer className="workspace-footer h-7 bg-[#080c14] border-t border-[#172132] px-2.5 sm:px-3 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 select-none font-mono shrink-0 overflow-x-auto gap-2">
       {/* Left info items */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="footer-primary flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Streaming status */}
         <div className="flex items-center gap-1.5 shrink-0">
           <span
@@ -39,36 +39,36 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
         <span className="text-slate-700">|</span>
 
         {/* File name */}
-        <span className="truncate max-w-[120px] sm:max-w-[220px] text-slate-300">
+        <span className="footer-file-name truncate max-w-[120px] sm:max-w-[220px] text-slate-300">
           {currentFile.filename}
         </span>
 
-        <span className="text-slate-700 hidden sm:inline">|</span>
+        <span className="footer-divider text-slate-700 hidden sm:inline">|</span>
 
         {/* Size */}
-        <span className="hidden sm:inline text-slate-400">
+        <span className="footer-file-size hidden sm:inline text-slate-400">
           {currentFile.size}
         </span>
 
-        <span className="text-slate-700 hidden md:inline">|</span>
+        <span className="footer-divider text-slate-700 hidden md:inline">|</span>
 
         {/* Position */}
-        <span className="hidden md:inline text-slate-300">
+        <span className="footer-position hidden md:inline text-slate-300">
           Pos: {currentLine.toLocaleString()} / {currentFile.lineCount.toLocaleString()} ({percentage}%)
         </span>
 
-        <span className="text-slate-700 hidden lg:inline">|</span>
+        <span className="footer-divider text-slate-700 hidden lg:inline">|</span>
 
         {/* Encoding */}
-        <span className="hidden lg:inline text-slate-400">
+        <span className="footer-encoding hidden lg:inline text-slate-400">
           UTF-8 (LF)
         </span>
       </div>
 
       {/* Right info items */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="footer-secondary flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Backend Connectivity Status */}
-        <div className="flex items-center gap-1.5 text-[10px]">
+        <div className="footer-backend flex items-center gap-1.5 text-[10px]">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
               backendStatus?.connected ? 'bg-emerald-400' : 'bg-rose-500'
@@ -79,7 +79,7 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
           </span>
         </div>
 
-        <span className="text-slate-700 hidden sm:inline">|</span>
+        <span className="footer-divider text-slate-700 hidden sm:inline">|</span>
 
         {/* Live tailing toggle button */}
         <button
@@ -93,10 +93,10 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
           <span className="hidden xs:inline">Live tailing</span>
         </button>
 
-        <span className="text-slate-700">|</span>
+        <span className="footer-divider text-slate-700">|</span>
 
         {/* Line indicator */}
-        <span className="text-slate-300">
+        <span className="footer-line text-slate-300">
           Ln {currentLine.toLocaleString()}<span className="hidden sm:inline"> of {currentFile.lineCount.toLocaleString()}</span>
         </span>
       </div>

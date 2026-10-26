@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, BarChart2, TrendingUp, AlertTriangle, Cpu, Activity } from 'lucide-react';
 import { LogFile } from '../types/log';
 import { LogPulseAPI } from '../services/api';
+import { useToast } from './Toast';
 
 interface MetricsViewModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export const MetricsViewModal: React.FC<MetricsViewModalProps> = ({
   onClose,
   currentFile,
 }) => {
+  const { showToast } = useToast();
   const [metrics, setMetrics] = useState<{
     ingestRateEPS: number;
     errorRatio: number;
@@ -23,11 +25,13 @@ export const MetricsViewModal: React.FC<MetricsViewModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      LogPulseAPI.getMetrics().then((data) => {
-        if (data) setMetrics(data);
-      });
+      LogPulseAPI.getMetrics()
+        .then((data) => { if (data) setMetrics(data); })
+        .catch((error: unknown) => {
+          showToast(error instanceof Error ? error.message : 'Could not load metrics.');
+        });
     }
-  }, [isOpen]);
+  }, [isOpen, showToast]);
   if (!isOpen) return null;
 
   return (

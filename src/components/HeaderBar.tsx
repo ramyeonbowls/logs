@@ -61,7 +61,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const isTunnel = activeConnection?.type === 'remote_tunnel';
 
   return (
-    <header className="h-12 bg-[#0d121c] border-b border-[#1b2434] px-2.5 sm:px-3 flex items-center justify-between text-xs select-none z-30 shrink-0">
+    <header className="workspace-header h-12 bg-[#0d121c] border-b border-[#1b2434] px-2.5 sm:px-3 flex items-center justify-between text-xs select-none z-30 shrink-0">
       {/* Left zone: Mobile toggle, Brand, View Tab, and Path Breadcrumb */}
       <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
         
@@ -77,7 +77,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Brand */}
         <div className="shrink-0">
-          <PulseLogo size="sm" showText={true} showBadge={true} />
+          <PulseLogo size="sm" showText={true} showBadge={false} />
         </div>
 
         <div className="hidden sm:block h-4 w-px bg-slate-800 shrink-0 mx-0.5" />
@@ -103,7 +103,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         </div>
 
         {/* Mobile current active file indicator badge */}
-        <div className="md:hidden flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#090e17] border border-[#1b2537] text-slate-300 font-mono text-[10.5px] truncate max-w-[150px] xs:max-w-[190px]">
+        <div className="mobile-current-file md:hidden flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#090e17] border border-[#1b2537] text-slate-300 font-mono text-[10.5px] truncate max-w-[150px] xs:max-w-[190px]">
           <FileText className="w-3 h-3 text-cyan-400 shrink-0" />
           <span className="truncate text-slate-200">{currentFile.filename}</span>
         </div>
@@ -138,7 +138,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         )}
 
         {/* Backend Connected Indicator Badge */}
-        <BackendStatusBadge status={backendStatus || null} onRefresh={onRefreshBackend} />
+        <div className="hidden sm:block">
+          <BackendStatusBadge status={backendStatus || null} onRefresh={onRefreshBackend} />
+        </div>
 
         {/* TAIL -F Toggle button */}
         <button
@@ -161,14 +163,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             className="flex items-center gap-1 p-1 rounded-full bg-[#162134] hover:bg-[#1c2c46] border border-[#263753] text-slate-200 cursor-pointer transition-colors"
             title="User Profile & Settings"
           >
-            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 to-sky-400 flex items-center justify-center text-white font-bold text-xs uppercase shadow-sm">
+            <div className="profile-glass-avatar w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 to-sky-400 flex items-center justify-center text-white font-bold text-xs uppercase shadow-sm">
               {user.name.charAt(0) || 'U'}
             </div>
             <ChevronDown className="w-3 h-3 text-slate-400 pr-0.5 hidden xs:block" />
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-64 bg-[#0d1420] border border-[#1e2a3e] rounded-xl shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="profile-glass-menu absolute right-0 mt-2 w-64 bg-[#0d1420] border border-[#1e2a3e] rounded-xl shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-3 py-2 border-b border-[#1b263a]">
                 <div className="font-semibold text-slate-100 text-xs truncate">{user.name}</div>
                 <div className="text-[11px] font-mono text-cyan-400 truncate">{user.email}</div>

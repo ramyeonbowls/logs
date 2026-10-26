@@ -4,6 +4,13 @@ import { AppConnection, SSHConnection, FileTreeNode, ConnectionType } from '../t
 // When empty, relative URLs ('/api/...') hit the integrated backend server
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+class ApiResponseError extends Error {}
+
+async function readApiError(res: Response, fallback: string): Promise<ApiResponseError> {
+  const data = await res.json().catch(() => ({}));
+  return new ApiResponseError(data.message || fallback);
+}
+
 export interface BackendStatus {
   connected: boolean;
   engine: string;
@@ -93,9 +100,10 @@ export class LogPulseAPI {
   static async getConnections(): Promise<AppConnection[]> {
     try {
       const res = await fetch(`${API_BASE}/api/connections`);
-      if (!res.ok) throw new Error('Failed to fetch connections');
+      if (!res.ok) throw await readApiError(res, 'Failed to fetch connections');
       return await res.json();
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiResponseError) throw err;
       return [];
     }
   }
@@ -107,9 +115,10 @@ export class LogPulseAPI {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conn)
       });
-      if (!res.ok) throw new Error('Failed to create connection');
+      if (!res.ok) throw await readApiError(res, 'Failed to create connection');
       return await res.json();
     } catch (err: any) {
+      if (err instanceof ApiResponseError) throw err;
       console.warn('Fallback createConnection:', err);
       const newConn: AppConnection = {
         id: conn.id || `conn-${Date.now()}`,
@@ -141,9 +150,10 @@ export class LogPulseAPI {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conn)
       });
-      if (!res.ok) throw new Error('Failed to update connection');
+      if (!res.ok) throw await readApiError(res, 'Failed to update connection');
       return await res.json();
     } catch (err: any) {
+      if (err instanceof ApiResponseError) throw err;
       console.warn('Fallback updateConnection:', err);
       return { success: true, connection: { ...conn, id } as AppConnection };
     }
@@ -154,9 +164,10 @@ export class LogPulseAPI {
       const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
-      if (!res.ok) throw new Error('Failed to delete connection');
+      if (!res.ok) throw await readApiError(res, 'Failed to delete connection');
       return await res.json();
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiResponseError) throw err;
       return { success: true };
     }
   }
@@ -319,9 +330,10 @@ export class LogPulseAPI {
   static async getMetrics() {
     try {
       const res = await fetch(`${API_BASE}/api/metrics`);
-      if (!res.ok) throw new Error('Failed to fetch metrics');
+      if (!res.ok) throw await readApiError(res, 'Failed to fetch metrics');
       return await res.json();
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiResponseError) throw err;
       return null;
     }
   }
@@ -330,9 +342,10 @@ export class LogPulseAPI {
   static async getSettings() {
     try {
       const res = await fetch(`${API_BASE}/api/settings`);
-      if (!res.ok) throw new Error('Failed to fetch settings');
+      if (!res.ok) throw await readApiError(res, 'Failed to fetch settings');
       return await res.json();
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiResponseError) throw err;
       return null;
     }
   }
@@ -344,8 +357,10 @@ export class LogPulseAPI {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
+      if (!res.ok) throw await readApiError(res, 'Failed to save settings');
       return await res.json();
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiResponseError) throw err;
       return newSettings;
     }
   }

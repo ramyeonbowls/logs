@@ -18,7 +18,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-[#0b1019] border border-[#1e2d44] w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="settings-glass-panel bg-[#0b1019] border border-[#1e2d44] w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col">
         <div className="h-12 bg-[#0e1624] border-b border-[#1b273b] px-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-white font-semibold text-sm">
             <Settings className="w-4 h-4 text-cyan-400" />

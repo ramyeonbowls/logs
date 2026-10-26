@@ -20,30 +20,30 @@ export const LogStatusBar: React.FC<LogStatusBarProps> = ({
   onScrollToEnd,
 }) => {
   return (
-    <div className="h-9 bg-[#090d15] border-b border-[#162030] px-2.5 sm:px-3 flex items-center justify-between text-xs select-none shrink-0 font-mono overflow-x-auto gap-2">
+    <div className="workspace-status h-9 bg-[#090d15] border-b border-[#162030] px-2.5 sm:px-3 flex items-center justify-between text-xs select-none shrink-0 font-mono overflow-x-auto gap-2">
       
       {/* Left File Metadata badges */}
-      <div className="flex items-center gap-2 sm:gap-3 text-[10.5px] sm:text-[11px] text-slate-400 shrink-0">
+      <div className="status-file-meta flex items-center gap-2 sm:gap-3 text-[10.5px] sm:text-[11px] text-slate-400 shrink-0">
         <div className="flex items-center gap-1.5 text-cyan-300 font-medium">
           <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
           <span className="truncate max-w-[120px] sm:max-w-[200px]">{currentFile.filename}</span>
         </div>
 
-        <span className="text-slate-600">|</span>
+        <span className="status-separator text-slate-600">|</span>
         <span className="text-slate-300">{currentFile.size}</span>
 
-        <span className="text-slate-600">|</span>
+        <span className="status-separator text-slate-600">|</span>
         <span className="text-slate-300">{currentFile.lineCount.toLocaleString()} lines</span>
 
-        <span className="text-slate-600 hidden lg:inline">|</span>
+        <span className="status-separator text-slate-600 hidden lg:inline">|</span>
         <span className="text-slate-400 hidden lg:inline">Plain text / {currentFile.encoding}</span>
 
-        <span className="text-slate-600 hidden xl:inline">|</span>
+        <span className="status-separator text-slate-600 hidden xl:inline">|</span>
         <span className="text-slate-400 hidden xl:inline">{currentFile.lineEnding}</span>
       </div>
 
       {/* Center HIGHLIGHT Filter Buttons */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="status-level-filters flex items-center gap-1.5 sm:gap-2 shrink-0">
         <span className="text-[9.5px] sm:text-[10px] uppercase font-bold text-slate-500 tracking-wider hidden xs:inline">
           HIGHLIGHT:
         </span>
@@ -99,7 +99,7 @@ export const LogStatusBar: React.FC<LogStatusBarProps> = ({
       </div>
 
       {/* Right Top / End Jump Shortcuts */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      <div className="status-jump-actions flex items-center gap-1 sm:gap-1.5 shrink-0">
         <button
           onClick={onScrollToTop}
           className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded bg-[#101724] hover:bg-[#172336] border border-[#1b273b] text-slate-300 hover:text-white text-[10.5px] sm:text-[11px] transition-colors cursor-pointer"

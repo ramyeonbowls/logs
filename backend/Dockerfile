@@ -23,7 +23,7 @@ RUN go build -ldflags="-s -w" -o logpulse-server main.go
 # Minimal runtime stage
 FROM alpine:3.21
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata bash wget curl
 
 WORKDIR /app
 

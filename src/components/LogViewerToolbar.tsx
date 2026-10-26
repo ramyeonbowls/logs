@@ -68,10 +68,10 @@ export const LogViewerToolbar: React.FC<LogViewerToolbarProps> = ({
   const [showFileDropdown, setShowFileDropdown] = useState(false);
 
   return (
-    <div className="bg-[#0b1018] border-b border-[#182335] px-2.5 sm:px-3 py-1.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 text-xs select-none shrink-0">
+    <div className="workspace-toolbar relative z-20 bg-[#0b1018] border-b border-[#182335] px-2.5 sm:px-3 py-1.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 text-xs select-none shrink-0">
       
       {/* Left Area: File Selector & Search Box */}
-      <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+      <div className="toolbar-search-row flex items-center gap-2 flex-1 min-w-[240px]">
         {/* File dropdown selector */}
         <div className="relative shrink-0">
           <button
@@ -84,7 +84,7 @@ export const LogViewerToolbar: React.FC<LogViewerToolbarProps> = ({
           </button>
 
           {showFileDropdown && (
-            <div className="absolute left-0 mt-1.5 w-60 sm:w-64 rounded-md bg-[#0e1624] border border-[#23334c] shadow-2xl py-1 z-50">
+            <div className="file-dropdown-menu absolute left-0 mt-1.5 w-60 sm:w-64 rounded-md bg-[#0e1624] border border-[#23334c] shadow-2xl py-1 z-50">
               <div className="px-3 py-1 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
                 Switch Active Stream
               </div>
@@ -164,7 +164,7 @@ export const LogViewerToolbar: React.FC<LogViewerToolbarProps> = ({
       </div>
 
       {/* Right Controls Area */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 overflow-x-auto max-w-full pb-0.5 lg:pb-0">
+      <div className="toolbar-actions flex items-center gap-1 sm:gap-1.5 shrink-0 overflow-x-auto max-w-full pb-0.5 lg:pb-0">
         
         {/* FOLLOW TAIL button */}
         <button

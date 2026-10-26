@@ -26,13 +26,14 @@ import {
 } from 'lucide-react';
 import { AppConnection, ConnectionType, AuthMethod, FileTreeNode } from '../types/ssh';
 import { LogPulseAPI } from '../services/api';
+import { useToast } from './Toast';
 
 interface ConnectionSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   connections: AppConnection[];
   activeConnectionId: string;
-  onSelectConnection: (connectionId: string, updatedTree?: FileTreeNode[]) => void;
+  onSelectConnection: (connectionId: string, updatedTree?: FileTreeNode[]) => void | Promise<void>;
   onRefreshConnections: () => Promise<void>;
 }
 
@@ -44,6 +45,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
   onSelectConnection,
   onRefreshConnections,
 }) => {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'ssh' | 'local' | 'saved'>('saved');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -84,13 +86,11 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // Reset or fill form when opening or editing
   const resetForm = (type: ConnectionType = 'ssh') => {
     setEditingId(null);
     setTestResult(null);
-    setSaveSuccessMsg(null);
     if (type === 'local_folder') {
       setActiveTab('local');
       setConnName('Local Host Logs');
@@ -116,7 +116,6 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
   const handleEditConnection = (conn: AppConnection) => {
     setEditingId(conn.id);
     setTestResult(null);
-    setSaveSuccessMsg(null);
     setConnName(conn.name);
     
     if (conn.type === 'local_folder') {
@@ -164,12 +163,16 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
       };
 
       const res = await LogPulseAPI.testConnection(payload);
-      setTestResult(res);
+      if (res.success) {
+        setTestResult(res);
+        showToast(res.message || 'Connection verified successfully.', 'success');
+      } else {
+        setTestResult(null);
+        showToast(res.message || 'Connection verification failed.');
+      }
     } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: err.message || 'Verification test failed'
-      });
+      setTestResult(null);
+      showToast(err.message || 'Verification test failed.');
     } finally {
       setIsTesting(false);
     }
@@ -179,7 +182,9 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
   const handleSave = async (e: React.FormEvent, type: ConnectionType) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveSuccessMsg(null);
+    if (!testResult?.success) {
+      showToast('This connection has not passed a test yet. Review its settings after saving.', 'warning');
+    }
 
     const connectionData: Partial<AppConnection> = {
       name: connName || (type === 'local_folder' ? `Local Folder (${localPath})` : `${username}@${host}`),
@@ -231,14 +236,14 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
 
       // Automatically activate the newly saved connection
       const activateRes = await LogPulseAPI.activateConnection(savedConn.id);
-      onSelectConnection(savedConn.id, activateRes.fileTree);
+      await onSelectConnection(savedConn.id, activateRes.fileTree);
 
-      setSaveSuccessMsg(`Connection saved to SQLite & activated successfully!`);
+      showToast('Connection saved and activated.', 'success');
       setTimeout(() => {
         onClose();
       }, 700);
     } catch (err: any) {
-      alert(`Error saving to SQLite: ${err.message}`);
+      showToast(`Error saving to SQLite: ${err.message || 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -256,11 +261,12 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
         const remaining = connections.filter(c => c.id !== id);
         if (remaining[0]) {
           const act = await LogPulseAPI.activateConnection(remaining[0].id);
-          onSelectConnection(remaining[0].id, act.fileTree);
+          await onSelectConnection(remaining[0].id, act.fileTree);
         }
       }
+      showToast('Connection deleted successfully.', 'success');
     } catch (err: any) {
-      alert(`Delete error: ${err.message}`);
+      showToast(`Delete error: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -274,7 +280,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none">
-      <div className="bg-[#0b1019] border border-[#1e2d44] w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="settings-glass-panel bg-[#0b1019] border border-[#1e2d44] w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="h-14 bg-[#0e1624] border-b border-[#1b273b] px-4 sm:px-5 flex items-center justify-between shrink-0">
@@ -306,10 +312,10 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-[#1b273b] bg-[#090d16] px-4 pt-2 gap-2 shrink-0">
+        <div className="connection-config-tabs flex border-b border-[#1b273b] bg-[#090d16] px-4 pt-2 gap-2 shrink-0">
           <button
             onClick={() => setActiveTab('saved')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
+            className={`connection-config-tab flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
               activeTab === 'saved'
                 ? 'border-cyan-400 text-cyan-300 bg-[#0e1726]/60'
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-[#0c121e]'
@@ -324,7 +330,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
               if (activeTab !== 'ssh') resetForm('ssh');
               setActiveTab('ssh');
             }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
+            className={`connection-config-tab flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
               activeTab === 'ssh'
                 ? 'border-cyan-400 text-cyan-300 bg-[#0e1726]/60'
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-[#0c121e]'
@@ -339,7 +345,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
               if (activeTab !== 'local') resetForm('local_folder');
               setActiveTab('local');
             }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
+            className={`connection-config-tab flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-medium border-b-2 cursor-pointer transition-colors ${
               activeTab === 'local'
                 ? 'border-cyan-400 text-cyan-300 bg-[#0e1726]/60'
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-[#0c121e]'
@@ -453,9 +459,14 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
                             <button
                               type="button"
                               onClick={async () => {
-                                const act = await LogPulseAPI.activateConnection(conn.id);
-                                onSelectConnection(conn.id, act.fileTree);
-                                onClose();
+                                try {
+                                  const act = await LogPulseAPI.activateConnection(conn.id);
+                                  await onSelectConnection(conn.id, act.fileTree);
+                                  showToast('Connection activated successfully.', 'success');
+                                  onClose();
+                                } catch (err: any) {
+                                  showToast(err.message || 'Could not activate connection.');
+                                }
                               }}
                               className="px-2.5 py-1 bg-cyan-600/80 hover:bg-cyan-600 text-white font-mono text-[11px] rounded transition-colors cursor-pointer flex items-center gap-1"
                               title="Mount and set as active"
@@ -784,13 +795,6 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
                 </div>
               )}
 
-              {saveSuccessMsg && (
-                <div className="p-2.5 rounded bg-cyan-950/50 border border-cyan-800/60 text-cyan-300 font-mono text-[11.5px] flex items-center gap-2">
-                  <Check className="w-4 h-4 text-cyan-400" />
-                  <span>{saveSuccessMsg}</span>
-                </div>
-              )}
-
               {/* Actions */}
               <div className="pt-2 border-t border-[#1a2538] flex items-center justify-between">
                 <button
@@ -970,13 +974,6 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {saveSuccessMsg && (
-                <div className="p-2.5 rounded bg-amber-950/50 border border-amber-800/60 text-amber-300 font-mono text-[11.5px] flex items-center gap-2">
-                  <Check className="w-4 h-4 text-amber-400" />
-                  <span>{saveSuccessMsg}</span>
                 </div>
               )}
 

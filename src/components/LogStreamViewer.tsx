@@ -79,7 +79,7 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#070b12] overflow-hidden select-text font-mono">
+    <div className="workspace-stream flex-1 flex flex-col bg-[#070b12] overflow-hidden select-text font-mono">
       {/* Sub-header info banner with responsive labels */}
       <div className="h-7 bg-[#0b1018] border-b border-[#141d2c] px-2.5 sm:px-3 flex items-center justify-between text-[10px] sm:text-[10.5px] text-slate-400 font-mono select-none shrink-0 overflow-x-auto">
         <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
@@ -118,9 +118,9 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                 <div
                   id={`line-${line.lineNumber}`}
                   onClick={() => onSelectLine(line.lineNumber)}
-                  className={`flex items-start group hover:bg-[#121c2c] transition-colors rounded cursor-pointer py-0.5 ${
+                  className={`log-line flex items-start group hover:bg-[#121c2c] transition-colors rounded cursor-pointer py-0.5 ${
                     isSelected
-                      ? 'bg-[#10243d] border border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                      ? 'is-selected bg-[#10243d] border border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
                       : 'border border-transparent'
                   }`}
                 >
@@ -170,9 +170,9 @@ export const LogStreamViewer: React.FC<LogStreamViewerProps> = ({
                           key={`stack-${line.id}-${stackIdx}`}
                           id={`line-${stackLineNumber}`}
                           onClick={() => onSelectLine(stackLineNumber)}
-                          className={`flex items-start group hover:bg-[#121c2c] transition-colors rounded cursor-pointer py-0.5 ${
+                          className={`log-line flex items-start group hover:bg-[#121c2c] transition-colors rounded cursor-pointer py-0.5 ${
                             isStackSelected
-                              ? 'bg-[#10243d] border border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                              ? 'is-selected bg-[#10243d] border border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
                               : 'border border-transparent'
                           }`}
                         >

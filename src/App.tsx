@@ -16,6 +16,7 @@ import { GrepViewModal } from './components/GrepViewModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SSHConnectionModal } from './components/SSHConnectionModal';
 import { ConnectionSettingsModal } from './components/ConnectionSettingsModal';
+import { useToast } from './components/Toast';
 
 const EMPTY_CONNECTION: SSHConnection = {
   id: '',
@@ -49,6 +50,7 @@ function findFirstFileNode(nodes: FileTreeNode[]): FileTreeNode | null {
 }
 
 export default function App() {
+  const { showToast } = useToast();
   // Current screen mode: 'login' | 'workspace'
   // Check sessionStorage for existing session on mount
   const [currentScreen, setCurrentScreen] = useState<'login' | 'workspace'>(() => {
@@ -85,7 +87,6 @@ export default function App() {
   // Files data & current file selection
   const [files, setFiles] = useState<LogFile[]>([]);
   const [currentFileId, setCurrentFileId] = useState<string>('');
-  const [logError, setLogError] = useState<string | null>(null);
 
   // Tailing & Streaming
   const [isTailing, setIsTailing] = useState<boolean>(true);
@@ -118,6 +119,10 @@ export default function App() {
       try {
         const status = await LogPulseAPI.checkHealth();
         if (mounted) setBackendStatus(status);
+        if (!status.connected) {
+          if (mounted) showToast('Backend is offline. Remote log and connection features may be unavailable.', 'warning');
+          return;
+        }
 
         // Fetch backend SSH connections
         const conns = await LogPulseAPI.getSSHConnections();
@@ -134,6 +139,7 @@ export default function App() {
 
       } catch (err) {
         console.warn('Backend sync failed:', err);
+        if (mounted) showToast(err instanceof Error ? err.message : 'Could not sync with the backend.');
       }
     }
 
@@ -148,7 +154,7 @@ export default function App() {
       mounted = false;
       clearInterval(pingInterval);
     };
-  }, []);
+  }, [showToast]);
 
   // Active SSH object
   const activeConnection = useMemo(() => {
@@ -196,7 +202,6 @@ export default function App() {
     if (node.type !== 'file') return;
 
     const fileId = node.fileId || node.id;
-    setLogError(null);
     try {
       const result = await LogPulseAPI.getLogs({ fileId, filePath: node.path });
       const logFile: LogFile = {
@@ -214,7 +219,7 @@ export default function App() {
       setCurrentFileId(fileId);
       setSelectedLineNumber(result.lines[0]?.lineNumber || null);
     } catch (error: any) {
-      setLogError(error.message || 'Could not read remote log file.');
+      showToast(error.message || 'Could not read remote log file.');
       setCurrentFileId('');
       setSelectedLineNumber(null);
       setFiles([]);
@@ -315,11 +320,16 @@ export default function App() {
   }, [matchCount, matchIndex, filteredLines]);
 
   // Copy logs handler
-  const handleCopyLogs = () => {
+  const handleCopyLogs = async () => {
     const textToCopy = filteredLines.map(l => `${l.lineNumber} ${l.timestamp} [${l.level}] [${l.service}] ${l.message}`).join('\n');
-    navigator.clipboard.writeText(textToCopy);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setIsCopied(true);
+      showToast('Visible log lines copied.', 'success');
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch {
+      showToast('Could not copy the log lines. Check clipboard permissions.');
+    }
   };
 
   const handleDownloadFile = () => {
@@ -393,7 +403,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative w-screen h-screen flex flex-col bg-[#070b12] text-slate-200 overflow-hidden select-none font-sans">
+    <div className="workspace-shell relative w-screen h-screen flex flex-col bg-[#070b12] text-slate-200 overflow-hidden select-none font-sans">
       
       {/* Top Header Bar */}
       <HeaderBar
@@ -417,7 +427,7 @@ export default function App() {
       />
 
       {/* Main Workspace Body: Sidebar (File Tree + SSH) + Log Viewer Viewport */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="workspace-body flex-1 flex overflow-hidden relative">
         {/* Left Sidebar: File Tree & SSH Connection Manager */}
         <Sidebar
           fileTree={fileTree}
@@ -434,7 +444,7 @@ export default function App() {
         />
 
         {/* Central Log Viewer Area */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#070b12] min-w-0">
+        <main className="workspace-main flex-1 flex flex-col overflow-hidden bg-[#070b12] min-w-0">
           {/* Top Filter & Grep Toolbar */}
           <LogViewerToolbar
             currentFile={currentFile}
@@ -480,7 +490,6 @@ export default function App() {
           {/* Terminal Log Stream View */}
           <LogStreamViewer
             lines={filteredLines}
-            loadError={logError}
             selectedLineNumber={selectedLineNumber}
             onSelectLine={(num) => {
               setSelectedLineNumber(num);
@@ -515,7 +524,6 @@ export default function App() {
           setFiles([]);
           setCurrentFileId('');
           setSelectedLineNumber(null);
-          setLogError(null);
           try {
             const newTree = updatedTree?.length
               ? updatedTree
@@ -527,8 +535,8 @@ export default function App() {
             }
           } catch (err) {
             console.warn('Activate connection error:', err);
+            showToast(err instanceof Error ? err.message : 'Could not activate connection.');
             setFileTree([]);
-            throw err;
           }
         }}
         onRefreshConnections={async () => {

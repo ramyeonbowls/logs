@@ -1,37 +1,362 @@
 @import "tailwindcss";
 
-@layer base {
-  body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  
-  .font-mono, code, pre {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-variant-numeric: tabular-nums;
-  }
+:root {
+  color-scheme: light;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #171717;
+  background: #f3f3f1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom sleek dark scrollbar */
-::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: inherit;
+  background:
+    radial-gradient(ellipse at 16% 4%, rgba(255,255,255,.98) 0, rgba(255,255,255,0) 38%),
+    radial-gradient(ellipse at 86% 18%, rgba(211,214,219,.75) 0, rgba(211,214,219,0) 36%),
+    radial-gradient(ellipse at 45% 100%, rgba(255,255,255,.9) 0, rgba(255,255,255,0) 48%),
+    #e9e9e7;
 }
-::-webkit-scrollbar-track {
-  background: #090d16;
+
+.font-mono {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+
+/* Keep log output and code readable while using the toast font across the UI. */
+.workspace-stream, .workspace-stream .font-mono, code, pre {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-sileo-viewport] {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Give every utility-based component the same frosted white material. */
+[class*="bg-"] {
+  background-color: rgba(255, 255, 255, .60) !important;
+  -webkit-backdrop-filter: saturate(155%) blur(18px);
+  backdrop-filter: saturate(155%) blur(18px);
+}
+
+[class*="bg-gradient-"] { background-image: none !important; }
+[class*="bg-black/"] { background-color: rgba(20, 20, 22, .20) !important; }
+[class*="bg-emerald-"], [class*="bg-rose-"], [class*="bg-red-"],
+[class*="bg-amber-"], [class*="bg-yellow-"], [class*="bg-teal-"],
+[class*="bg-sky-"], [class*="bg-blue-"] {
+  background-color: rgba(35, 35, 38, .07) !important;
+}
+[class*="rounded-full"][class*="bg-"] { background-color: #555 !important; }
+
+/* Normalize colored labels, icons, and borders to the black/gray palette. */
+[class*="text-slate-"], [class*="text-gray-"], [class*="text-white"],
+[class*="text-cyan-"], [class*="text-emerald-"], [class*="text-green-"],
+[class*="text-rose-"], [class*="text-red-"], [class*="text-amber-"],
+[class*="text-yellow-"], [class*="text-teal-"], [class*="text-sky-"],
+[class*="text-blue-"], [class*="text-indigo-"], [class*="text-purple-"],
+[class*="text-violet-"], [class*="text-orange-"] {
+  color: #525255 !important;
+}
+[class*="text-slate-950"], [class*="text-gray-950"] { color: #171717 !important; }
+[class*="border-"] { border-color: rgba(35, 35, 38, .11) !important; }
+[class*="ring-"] { --tw-ring-color: rgba(35, 35, 38, .24) !important; }
+[class*="from-"], [class*="via-"], [class*="to-"] {
+  --tw-gradient-from: #555 !important;
+  --tw-gradient-via: #777 !important;
+  --tw-gradient-to: #999 !important;
+}
+[class*="bg-cyan-600"] { background-color: #171717 !important; }
+[class*="bg-cyan-600"][class*="text-white"] { color: #fff !important; }
+
+/* A subtle glass edge and depth on cards, dialogs, and popovers. */
+[class*="rounded-lg"], [class*="rounded-xl"], [class*="rounded-2xl"] {
+  border-color: rgba(255, 255, 255, .88);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 30px rgba(25,25,28,.075);
+}
+
+header {
+  background-color: rgba(255,255,255,.72) !important;
+  border-color: rgba(255,255,255,.9) !important;
+  box-shadow: 0 1px 0 rgba(20,20,22,.05), 0 8px 28px rgba(20,20,22,.045);
+}
+
+aside {
+  background-color: rgba(255,255,255,.48) !important;
+  border-color: rgba(255,255,255,.8) !important;
+  box-shadow: 8px 0 28px rgba(20,20,22,.035);
+}
+
+/* Keep account and settings surfaces explicitly light, even when their legacy
+   dark utility classes are present in the component markup. */
+.profile-glass-menu {
+  color: #242426 !important;
+  background: rgba(255,255,255,.88) !important;
+  border: 1px solid rgba(255,255,255,.95) !important;
+  -webkit-backdrop-filter: saturate(170%) blur(24px) !important;
+  backdrop-filter: saturate(170%) blur(24px) !important;
+  box-shadow: 0 18px 48px rgba(20,20,22,.16), inset 0 1px 0 rgba(255,255,255,.95) !important;
+}
+.profile-glass-menu [class*="bg-"] {
+  background-color: rgba(30,30,32,.035) !important;
+  box-shadow: none !important;
+}
+.profile-glass-menu button:hover { background-color: rgba(30,30,32,.08) !important; }
+.profile-glass-avatar {
+  background: #171717 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(20,20,22,.18) !important;
+}
+.settings-glass-panel {
+  color: #242426 !important;
+  background: rgba(255,255,255,.84) !important;
+  border: 1px solid rgba(255,255,255,.96) !important;
+  -webkit-backdrop-filter: saturate(170%) blur(26px) !important;
+  backdrop-filter: saturate(170%) blur(26px) !important;
+  box-shadow: 0 24px 64px rgba(20,20,22,.18), inset 0 1px 0 rgba(255,255,255,.98) !important;
+}
+.settings-glass-panel [class*="bg-"] {
+  background-color: rgba(245,245,246,.58) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+.settings-glass-panel [class*="text-white"],
+.profile-glass-menu [class*="text-white"] { color: #171717 !important; }
+
+main { background-color: transparent !important; }
+
+[class~="rounded"] { border-radius: 10px; }
+[class~="rounded-md"] { border-radius: 12px; }
+[class~="rounded-lg"] { border-radius: 16px; }
+[class~="rounded-xl"] { border-radius: 20px; }
+[class~="rounded-2xl"] { border-radius: 24px; }
+button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button { transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+input, select, textarea {
+  color: #171717;
+  background-color: rgba(255,255,255,.72);
+  border-color: rgba(35,35,38,.14);
+  box-shadow: inset 0 1px 2px rgba(20,20,22,.045);
+}
+input::placeholder, textarea::placeholder { color: #9a9a9c; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(23,23,23,.55);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: rgba(30,30,32,.2);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+::-webkit-scrollbar-thumb:hover { background-color: rgba(30,30,32,.36); }
+
+.glow-cyan, .glow-card-top { box-shadow: 0 10px 30px rgba(20,20,22,.08); }
+
+/* Strengthen hierarchy and text contrast across the light interface. */
+[class*="text-white"], [class*="text-slate-100"] { color: #171719 !important; }
+[class*="text-slate-200"] { color: #303034 !important; }
+[class*="text-slate-300"] { color: #444449 !important; }
+[class*="text-slate-400"] { color: #626267 !important; }
+[class*="text-slate-500"], [class*="text-slate-600"], [class*="text-slate-700"] { color: #77777c !important; }
+
+.workspace-shell {
+  min-width: 0;
+  min-height: 0;
+  background: rgba(255,255,255,.24) !important;
+}
+.workspace-main { min-height: 0; }
+.workspace-toolbar, .workspace-status, .workspace-footer {
+  color: #4d4d51;
+  border-color: rgba(30,30,32,.08) !important;
+}
+.file-dropdown-menu {
+  background-color: rgba(255,255,255,.96) !important;
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  backdrop-filter: saturate(140%) blur(12px);
+  border-color: rgba(30,30,32,.14) !important;
+  box-shadow: 0 16px 36px rgba(20,20,22,.18);
+}
+.connection-config-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+  padding: .65rem 1.25rem 0;
+  background: rgba(255,255,255,.30) !important;
+}
+.connection-config-tab {
+  justify-content: center;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: .65rem .75rem;
+  border: 1px solid transparent;
+  border-bottom-width: 2px;
+  border-radius: .65rem .65rem 0 0;
+  white-space: nowrap;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: .75rem;
+}
+.connection-config-tab[class*="border-cyan-400"] {
+  background: rgba(255,255,255,.72) !important;
+  border-color: rgba(20,20,22,.10) !important;
+  border-bottom-color: #555 !important;
+  color: #222 !important;
+}
+.connection-config-tab[class*="border-transparent"] {
+  color: #666 !important;
+}
+.connection-config-tab:hover { background: rgba(255,255,255,.5) !important; }
+.workspace-stream {
+  min-height: 0;
+  background: rgba(255,255,255,.38) !important;
+}
+.workspace-sidebar { color: #29292c; }
+.sidebar-connection-panel, .file-tree-header, .file-tree-filters {
+  background: rgba(255,255,255,.38) !important;
+  border-color: rgba(30,30,32,.08) !important;
+}
+.sidebar-connection-panel > div:nth-child(2) {
+  background: rgba(255,255,255,.68) !important;
+  border-color: rgba(30,30,32,.10) !important;
+  box-shadow: 0 5px 16px rgba(20,20,22,.045), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.file-tree-list { padding: .55rem .5rem; }
+.file-tree-node { margin-block: 1px; }
+.file-tree-folder, .file-tree-file {
+  min-height: 2rem;
+  padding-block: .4rem;
+  color: #55555a !important;
+  border-radius: .6rem;
+}
+.file-tree-folder:hover, .file-tree-file:hover {
+  background: rgba(30,30,32,.055) !important;
+  color: #202023 !important;
+}
+.file-tree-folder .font-semibold { color: #343438 !important; }
+.file-tree-file.is-selected {
+  background: rgba(30,30,32,.09) !important;
+  border-left: 2px solid #29292c !important;
+  color: #171719 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
+}
+.file-tree-file.is-selected svg { color: #29292c !important; }
+.workspace-stream > div:first-child {
+  height: 2.25rem;
+  background: rgba(255,255,255,.62) !important;
+  border-color: rgba(30,30,32,.08) !important;
+}
+.workspace-stream > div:nth-child(2) { padding: .65rem .75rem; }
+.log-line {
+  min-height: 1.55em;
+  padding-block: .12rem;
+  border-radius: .35rem;
+  color: #303034;
+}
+.log-line:hover { background: rgba(30,30,32,.045) !important; }
+.log-line.is-selected {
+  background: rgba(30,30,32,.085) !important;
+  border-color: rgba(30,30,32,.18) !important;
+  box-shadow: inset 3px 0 #333 !important;
+}
+.workspace-stream [class*="text-rose-"] { color: #b42332 !important; }
+.workspace-stream [class*="text-amber-"] { color: #956000 !important; }
+.workspace-stream [class*="text-emerald-"] { color: #197245 !important; }
+.workspace-stream [class*="text-sky-"] { color: #2366a8 !important; }
+.workspace-stream [class*="text-cyan-"] { color: #176f82 !important; }
+.workspace-stream [class*="text-slate-400"],
+.workspace-stream [class*="text-slate-500"],
+.workspace-stream [class*="text-slate-600"] { color: #77777c !important; }
+
+[data-sileo-title] { color: #171719 !important; }
+[data-sileo-description] { color: #626267 !important; }
+
+@media (max-width: 767px) {
+  .workspace-shell { width: 100%; height: 100dvh; }
+  .workspace-body { min-height: 0; }
+  .workspace-header {
+    min-height: 3.5rem;
+    height: 3.5rem;
+    padding-inline: .65rem;
+    gap: .5rem;
+  }
+  .workspace-header > div:first-child { min-width: 0; gap: .55rem; }
+  .workspace-header > div:last-child { gap: .4rem; }
+  .workspace-header .mobile-current-file { display: none; }
+  .workspace-main { width: 100%; }
+
+  .connection-config-tabs {
+    display: flex;
+    gap: .35rem;
+    padding: .55rem .75rem 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .connection-config-tabs::-webkit-scrollbar { display: none; }
+  .connection-config-tab { flex: 1 0 auto; min-height: 2.5rem; padding-inline: .65rem; }
+
+  .workspace-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .55rem;
+    padding: .65rem .75rem;
+  }
+  .toolbar-search-row { width: 100%; min-width: 0; gap: .45rem; }
+  .toolbar-search-row > .relative > button { max-width: 7.5rem; }
+  .toolbar-search-row > .flex-1 { min-width: 0; }
+  .toolbar-actions {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: .4rem;
+    padding-bottom: .1rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .toolbar-actions::-webkit-scrollbar { display: none; }
+  .toolbar-actions > button, .toolbar-actions > div { min-height: 2rem; }
+
+  .workspace-status {
+    height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .55rem;
+    padding: .65rem .75rem;
+    overflow: visible;
+  }
+  .status-file-meta {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+    gap: .5rem;
+  }
+  .status-separator { display: none; }
+  .status-file-meta > div { min-width: 0; }
+  .status-file-meta > div > span:last-child { max-width: min(44vw, 12rem); }
+  .status-level-filters { width: 100%; gap: .4rem; }
+  .status-level-filters > button { flex: 1; padding-inline: .4rem; }
+  .status-jump-actions { justify-content: flex-end; }
+
+  .workspace-footer {
+    min-height: 2rem;
+    height: 2rem;
+    padding-inline: .7rem;
+    overflow: hidden;
+  }
+  .footer-primary, .footer-secondary { min-width: 0; gap: .5rem; }
+  .footer-file-size, .footer-position, .footer-encoding { display: none !important; }
+  .footer-backend, .footer-divider, .footer-secondary > button span { display: none !important; }
+  .footer-line { white-space: nowrap; }
 }
 
-/* Subtle glow utilities */
-.glow-cyan {
-  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.25);
-}
-
-.glow-card-top {
-  box-shadow: 0 -1px 0 0 rgba(56, 189, 248, 0.4), 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+@media (max-width: 420px) {
+  .workspace-header .profile-glass-avatar { width: 1.75rem; height: 1.75rem; }
+  .workspace-header .profile-glass-menu { width: min(18rem, calc(100vw - 1rem)); }
+  .workspace-status { padding-inline: .6rem; }
+  .status-level-filters { gap: .3rem; }
+  .status-level-filters > button:not(:last-child) { font-size: 9px; padding-inline: .25rem; }
+  .workspace-stream > div:first-child { padding-inline: .65rem; }
 }
