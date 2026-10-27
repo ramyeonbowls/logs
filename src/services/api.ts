@@ -4,6 +4,10 @@ import { AppConnection, SSHConnection, FileTreeNode, ConnectionType } from '../t
 // When empty, relative URLs ('/api/...') hit the integrated backend server
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, { ...init, credentials: 'include' });
+}
+
 class ApiResponseError extends Error {}
 
 async function readApiError(res: Response, fallback: string): Promise<ApiResponseError> {
@@ -27,7 +31,7 @@ export class LogPulseAPI {
   static async checkHealth(): Promise<BackendStatus> {
     const startTime = performance.now();
     try {
-      const res = await fetch(`${API_BASE}/api/health`, {
+      const res = await apiFetch(`${API_BASE}/api/health`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(3500)
       });
@@ -40,17 +44,17 @@ export class LogPulseAPI {
           engine: data.engine || 'LogPulse Core & SQLite',
           uptime: data.uptime || 0,
           latencyMs,
-          sseActive: true,
+          sseActive: false,
           lastChecked: new Date().toLocaleTimeString(),
           sqliteActive: true,
-          sqliteConnectionsCount: data.sqliteConnectionsCount || 4
+          sqliteConnectionsCount: data.sqlite?.connectionsCount || 0
         };
       }
       throw new Error('Health check returned non-200');
     } catch {
       return {
         connected: false,
-        engine: 'Offline (Local In-Memory Mode)',
+        engine: 'Offline',
         latencyMs: 0,
         sseActive: false,
         lastChecked: new Date().toLocaleTimeString(),
@@ -63,32 +67,24 @@ export class LogPulseAPI {
   // 1. Auth API
   static async login(username: string, password?: string) {
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await apiFetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      if (!res.ok) throw new Error('Authentication failed');
+      if (!res.ok) throw await readApiError(res, 'Authentication failed');
       return await res.json();
-    } catch {
-      // Local fallback
-      return {
-        success: true,
-        token: 'local-session-jwt',
-        user: {
-          id: 'usr-99',
-          username,
-          email: username.includes('@') ? username : `${username}@logpulse.internal`,
-          name: username.includes('@') ? username.split('@')[0] : username,
-          role: 'Site Reliability Engineer (L5)'
-        }
-      };
-    }
+    } catch (error) { throw error; }
+  }
+
+  static async logout() {
+    const res = await apiFetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+    if (!res.ok) throw await readApiError(res, 'Could not sign out');
   }
 
   static async getMe() {
     try {
-      const res = await fetch(`${API_BASE}/api/auth/me`);
+      const res = await apiFetch(`${API_BASE}/api/auth/me`);
       if (!res.ok) throw new Error('Failed to get user');
       return await res.json();
     } catch {
@@ -99,81 +95,52 @@ export class LogPulseAPI {
   // 2. Comprehensive Connection Management & SQLite Persistence API
   static async getConnections(): Promise<AppConnection[]> {
     try {
-      const res = await fetch(`${API_BASE}/api/connections`);
+      const res = await apiFetch(`${API_BASE}/api/connections`);
       if (!res.ok) throw await readApiError(res, 'Failed to fetch connections');
       return await res.json();
     } catch (err) {
-      if (err instanceof ApiResponseError) throw err;
-      return [];
+      throw err;
     }
   }
 
   static async createConnection(conn: Partial<AppConnection>): Promise<{ success: boolean; connection: AppConnection }> {
     try {
-      const res = await fetch(`${API_BASE}/api/connections`, {
+      const res = await apiFetch(`${API_BASE}/api/connections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conn)
       });
       if (!res.ok) throw await readApiError(res, 'Failed to create connection');
       return await res.json();
-    } catch (err: any) {
-      if (err instanceof ApiResponseError) throw err;
-      console.warn('Fallback createConnection:', err);
-      const newConn: AppConnection = {
-        id: conn.id || `conn-${Date.now()}`,
-        name: conn.name || 'New Connection',
-        type: conn.type || 'ssh',
-        host: conn.host,
-        port: conn.port || 22,
-        username: conn.username || 'root',
-        authMethod: conn.authMethod || 'key',
-        remotePath: conn.remotePath || '/var/log',
-        localPath: conn.localPath || '/var/log',
-        recursive: conn.recursive !== false,
-        fileFilter: conn.fileFilter || '*.log',
-        isConnected: true,
-        latencyMs: 14,
-        cipher: 'chacha20-poly1305@openssh.com',
-        fingerprint: 'SHA256:d8Q8kZ...9aB12',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      return { success: true, connection: newConn };
-    }
+    } catch (err) { throw err; }
   }
 
   static async updateConnection(id: string, conn: Partial<AppConnection>): Promise<{ success: boolean; connection: AppConnection }> {
     try {
-      const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conn)
       });
       if (!res.ok) throw await readApiError(res, 'Failed to update connection');
       return await res.json();
-    } catch (err: any) {
-      if (err instanceof ApiResponseError) throw err;
-      console.warn('Fallback updateConnection:', err);
-      return { success: true, connection: { ...conn, id } as AppConnection };
-    }
+    } catch (err) { throw err; }
   }
 
   static async deleteConnection(id: string): Promise<{ success: boolean }> {
     try {
-      const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw await readApiError(res, 'Failed to delete connection');
       return await res.json();
     } catch (err) {
-      if (err instanceof ApiResponseError) throw err;
-      return { success: true };
+      throw err;
     }
   }
 
   static async activateConnection(id: string): Promise<{ success: boolean; activeId: string; fileTree: FileTreeNode[] }> {
-    const res = await fetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}/activate`, {
+    const res = await apiFetch(`${API_BASE}/api/connections/${encodeURIComponent(id)}/activate`, {
       method: 'POST'
     });
     if (!res.ok) {
@@ -192,6 +159,7 @@ export class LogPulseAPI {
     authMethod?: string;
     password?: string;
     privateKey?: string;
+    passphrase?: string;
     tunnelToken?: string;
     remotePath?: string;
     localPath?: string;
@@ -205,20 +173,16 @@ export class LogPulseAPI {
     fingerprint?: string;
     discoveredFiles?: Array<{ name: string; size: string; path: string }>;
   }> {
-    try {
-      const res = await fetch(`${API_BASE}/api/connections/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Connection test failed');
-      }
-      return await res.json();
-    } catch (err) {
-      throw err;
+    const res = await apiFetch(`${API_BASE}/api/connections/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Connection test failed');
     }
+    return await res.json();
   }
 
   // Backward compatibility alias for existing components
@@ -229,6 +193,8 @@ export class LogPulseAPI {
     authMethod: string;
     remotePath: string;
     password?: string;
+    privateKey?: string;
+    passphrase?: string;
   }) {
     return this.testConnection({
       type: 'ssh',
@@ -249,7 +215,7 @@ export class LogPulseAPI {
 
   // 4. File Tree API
   static async getFileTree(): Promise<FileTreeNode[]> {
-    const res = await fetch(`${API_BASE}/api/files/tree`);
+    const res = await apiFetch(`${API_BASE}/api/files/tree`);
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.message || 'Failed to fetch file tree');
@@ -275,7 +241,7 @@ export class LogPulseAPI {
     if (params.caseSensitive) query.set('caseSensitive', 'true');
     if (params.isRegex) query.set('isRegex', 'true');
 
-    const res = await fetch(`${API_BASE}/api/logs?${query.toString()}`);
+    const res = await apiFetch(`${API_BASE}/api/logs?${query.toString()}`);
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.message || 'Failed to fetch remote log');
@@ -290,7 +256,7 @@ export class LogPulseAPI {
     onStatusChange?: (connected: boolean) => void
   ): () => void {
     try {
-      const eventSource = new EventSource(`${API_BASE}/api/logs/stream?path=${encodeURIComponent(filePath)}`);
+      const eventSource = new EventSource(`${API_BASE}/api/logs/stream?path=${encodeURIComponent(filePath)}`, { withCredentials: true });
 
       eventSource.onopen = () => {
         onStatusChange?.(true);
@@ -329,30 +295,28 @@ export class LogPulseAPI {
   // 8. Metrics API
   static async getMetrics() {
     try {
-      const res = await fetch(`${API_BASE}/api/metrics`);
+      const res = await apiFetch(`${API_BASE}/api/metrics`);
       if (!res.ok) throw await readApiError(res, 'Failed to fetch metrics');
       return await res.json();
     } catch (err) {
-      if (err instanceof ApiResponseError) throw err;
-      return null;
+      throw err;
     }
   }
 
   // 9. Settings API
   static async getSettings() {
     try {
-      const res = await fetch(`${API_BASE}/api/settings`);
+      const res = await apiFetch(`${API_BASE}/api/settings`);
       if (!res.ok) throw await readApiError(res, 'Failed to fetch settings');
       return await res.json();
     } catch (err) {
-      if (err instanceof ApiResponseError) throw err;
-      return null;
+      throw err;
     }
   }
 
   static async saveSettings(newSettings: any) {
     try {
-      const res = await fetch(`${API_BASE}/api/settings`, {
+      const res = await apiFetch(`${API_BASE}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
@@ -360,8 +324,7 @@ export class LogPulseAPI {
       if (!res.ok) throw await readApiError(res, 'Failed to save settings');
       return await res.json();
     } catch (err) {
-      if (err instanceof ApiResponseError) throw err;
-      return newSettings;
+      throw err;
     }
   }
 }

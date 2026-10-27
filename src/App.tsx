@@ -124,6 +124,20 @@ export default function App() {
           return;
         }
 
+        let hasLocalSession = false;
+        try { hasLocalSession = Boolean(sessionStorage.getItem('logpulse_session')); } catch {}
+        if (!hasLocalSession) return;
+
+        const authenticatedUser = await LogPulseAPI.getMe();
+        if (!mounted) return;
+        if (!authenticatedUser) {
+          try { sessionStorage.removeItem('logpulse_session'); } catch {}
+          setCurrentUser({ name: '', email: '', role: '' });
+          setCurrentScreen('login');
+          return;
+        }
+        setCurrentUser(authenticatedUser);
+
         // Fetch backend SSH connections
         const conns = await LogPulseAPI.getSSHConnections();
         if (mounted) {
@@ -154,7 +168,7 @@ export default function App() {
       mounted = false;
       clearInterval(pingInterval);
     };
-  }, [showToast]);
+  }, [currentScreen, showToast]);
 
   // Active SSH object
   const activeConnection = useMemo(() => {
@@ -411,6 +425,7 @@ export default function App() {
         isTailing={isTailing}
         onToggleTail={() => setIsTailing(!isTailing)}
         onSignOut={() => {
+            void LogPulseAPI.logout().catch(() => {});
             try { sessionStorage.removeItem('logpulse_session'); } catch {}
             setCurrentScreen('login');
           }}

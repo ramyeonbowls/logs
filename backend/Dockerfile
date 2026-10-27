@@ -1,36 +1,24 @@
-# Multi-stage Dockerfile for lightweight Go 1.25 LogPulse Backend
-# Final image size: ~14 MB
-
-FROM golang:1.25-alpine AS builder
+# Go API runtime with SQLite persistence and OpenSSH SFTP client.
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
-
-# Enable CGO_ENABLED=0 for fully static binary
 ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
-
-# Copy go.mod
-COPY go.mod ./
-RUN go mod download || true
-
-# Copy source code
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
+RUN go build -trimpath -ldflags="-s -w" -o /out/logpulse-server .
 
-# Build stripped binary
-RUN go build -ldflags="-s -w" -o logpulse-server main.go
-
-# Minimal runtime stage
-FROM alpine:3.21
-
-RUN apk --no-cache add ca-certificates tzdata bash wget curl
-
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates tzdata wget openssh-client-default coreutils \
+    && addgroup -S -g 1000 logpulse && adduser -S -u 1000 -G logpulse logpulse \
+    && mkdir -p /app /app/data /tmp/logpulse-ssh \
+    && chown -R logpulse:logpulse /app /tmp/logpulse-ssh
 WORKDIR /app
-
-COPY --from=builder /app/logpulse-server /app/logpulse-server
+COPY --from=builder /out/logpulse-server /app/logpulse-server
 
 EXPOSE 8080
-
-USER nobody:nobody
-
+ENV PORT=8080
+ENV DATA_DIR=/app/data
+ENV LOG_ALLOWED_ROOTS=/var/log,/app/data
+USER logpulse:logpulse
 ENTRYPOINT ["/app/logpulse-server"]

@@ -1,175 +1,37 @@
-# LogPulse Observability — Backend Go 1.25 (Lightweight)
+# LogPulse Go API
 
-Backend ringan, berkinerja tinggi, dan efisien memori (< 15MB RAM) yang dibangun menggunakan **Go 1.25** tanpa ketergantungan library eksternal yang berat (*zero external bloated dependencies*, 100% Go Standard Library `net/http` modern routing).
+The Go service is the application's only API server. It owns authentication, user-scoped connections and settings, SQLite persistence, local log reads, SSH/SFTP access, downloads, and live streams. The React build is served separately as static files by Nginx; Caddy routes `/api/*` and `/health` to Go.
 
----
+## Requirements
 
-## 🚀 Keunggulan Backend Go 1.25 Ini
+- Go 1.27 or later
+- SQLite database file writable by the service account
+- OpenSSH `ssh` and `sftp` clients for remote connections
+- Set `APP_USERNAME` and `APP_PASSWORD` before the first launch. There are no built-in credentials. Existing Node-created accounts and password hashes are retained.
 
-1. **Zero External Dependencies**: Menggunakan pustaka standar Go 1.25 (`net/http` routing modern seperti `GET /api/logs`, `POST /api/ssh/test`).
-2. **Sangat Ringan & Cepat**: 
-   - Waktu startup: < 15ms.
-   - Pemakaian RAM: < 15MB dalam kondisi stream aktif.
-   - Ukuran binary statis hasil kompilasi: ~10MB.
-3. **Real-time SSE Streaming (`tail -f`)**: Menggunakan `http.Flusher` dan Goroutine non-blocking untuk mem-broadcast baris log baru ke browser via Server-Sent Events tanpa overhead WebSocket.
-4. **CORS Built-in**: Siap berkomunikasi dengan frontend Vite React di port 3000.
+## Run locally
 
----
-
-## 📂 Struktur Direktori
-
-```
-backend/
-├── Dockerfile              # Multi-stage build Go 1.25 Alpine (~14MB final image)
-├── Makefile                # Shortcut perintah (run, build, test, docker)
-├── README.md               # Dokumentasi panduan ini
-├── go.mod                  # Go 1.25 module
-├── main.go                 # HTTP server, routing, middleware CORS & Graceful Shutdown
-└── internal/
-    ├── handlers/
-    │   ├── auth.go         # /api/auth/login, /api/auth/me
-    │   ├── files.go        # /api/files/tree (Hierarchical file tree)
-    │   ├── logs.go         # /api/logs, /api/logs/stream (SSE tail -f), /api/logs/download
-    │   ├── metrics.go      # /api/metrics, /api/settings
-    │   └── ssh.go          # /api/ssh/test, /api/ssh/connections, /api/ssh/connect
-    ├── models/
-    │   └── models.go       # Struct definisi data (SSH, Logs, Tree, Metrics, User)
-    └── store/
-        └── store.go        # In-memory thread-safe store & generator simulasi log
+```sh
+cd logs/backend
+export DATA_DIR=./data
+export LOG_ALLOWED_ROOTS=/var/log,/tmp
+make run
 ```
 
----
+`make run` loads `../../.env` when the required credentials are not already in the environment. If that file is absent, set `APP_USERNAME` and `APP_PASSWORD` in your shell first. The API listens on port 8080 by default. Start the React development server separately with `cd logs && npm run dev`; Vite proxies API calls to Go. `DATA_DIR` defaults to `./data`. `LOG_ALLOWED_ROOTS` is a comma-separated allowlist for local-folder connections.
 
-## 🛠️ Cara Menjalankan Backend
+## Authentication and data
 
-### Prasyarat
-- Go 1.25 terinstall di sistem Anda (`go version`).
+Sign-in creates a random server-side session and sets an HttpOnly, SameSite cookie. All API routes except health and login require that session. The SQLite database is stored at `$DATA_DIR/logpulse.sqlite`; connection secrets are not returned by list or update responses. Existing connections are assigned to the first active user during migration, and active connections/settings are isolated per user.
 
-### 1. Jalankan Langsung (Development)
-```bash
-cd backend
-go run main.go
-```
-Server akan aktif di: **`http://localhost:8080`**.
+For SSH, the service uses OpenSSH with first-use host-key recording (`accept-new`) in `$DATA_DIR/known_hosts`. Mount approved local log directories into the Go container and include them in `LOG_ALLOWED_ROOTS`.
 
-### 2. Kompilasi Binary Statis (Production)
-```bash
-cd backend
-make build
-# atau secara manual:
-CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/logpulse-server main.go
+## Production deployment
 
-# Jalankan binary
-./bin/logpulse-server
+The repository-level `docker-compose.yml` uses the root `.env` file for Go credentials and log access. Caddy serves `*.cloudeskaerp.test` with the certificate pair mounted read-only from `certs/`; keep the private key out of version control. LogPulse is available at `logs.cloudeskaerp.test` and DBX at `dbx.cloudeskaerp.test`; point both local DNS/hosts entries to this server. `logpulse-data` persists the SQLite database. Set `LOG_ALLOWED_ROOTS` to the log directories mounted into the Go container.
+
+```sh
+docker compose up --build -d
 ```
 
-### 3. Menggunakan Docker
-```bash
-cd backend
-docker build -t logpulse-backend:1.25 .
-docker run -p 8080:8080 logpulse-backend:1.25
-```
-
----
-
-## 📡 Daftar Endpoint API Lengkap
-
-### 1. Autentikasi
-- **`POST /api/auth/login`**
-  ```bash
-  curl -X POST http://localhost:8080/api/auth/login \
-    -H "Content-Type: application/json" \
-    -d '{"username":"julian.putra99@gmail.com","password":"password123"}'
-  ```
-- **`GET /api/auth/me`**
-  ```bash
-  curl http://localhost:8080/api/auth/me
-  ```
-
-### 2. SSH Connection & Remote Folder
-- **`POST /api/ssh/test`** (Uji coba handshake & latensi SSH)
-  ```bash
-  curl -X POST http://localhost:8080/api/ssh/test \
-    -H "Content-Type: application/json" \
-    -d '{
-      "host":"prod-k8s-node-01.us-east.internal",
-      "port":22,
-      "username":"deploy",
-      "authMethod":"key",
-      "remotePath":"/var/log"
-    }'
-  ```
-- **`GET /api/ssh/connections`** (Mendapatkan daftar host tersimpan)
-  ```bash
-  curl http://localhost:8080/api/ssh/connections
-  ```
-- **`POST /api/ssh/connect`** (Menyimpan sesi host & me-mount remote folder)
-  ```bash
-  curl -X POST http://localhost:8080/api/ssh/connect \
-    -H "Content-Type: application/json" \
-    -d '{
-      "id":"conn-prod-01",
-      "name":"Production Node 01",
-      "host":"prod-k8s-node-01.us-east.internal",
-      "port":22,
-      "username":"deploy",
-      "remotePath":"/var/log/services"
-    }'
-  ```
-
-### 3. Remote File Tree
-- **`GET /api/files/tree`**
-  ```bash
-  curl http://localhost:8080/api/files/tree
-  ```
-  *Mengembalikan hierarki folder lengkap `/var/log` beserta file dan ukurannya.*
-
-### 4. Log Query, Grep & Live Stream (`tail -f`)
-- **`GET /api/logs`** (Query dengan filter grep, level, dan regex)
-  ```bash
-  # Ambil semua log
-  curl http://localhost:8080/api/logs?fileId=production-api
-
-  # Filter error saja
-  curl "http://localhost:8080/api/logs?fileId=production-api&level=ERROR"
-
-  # Grep kata kunci "jwt"
-  curl "http://localhost:8080/api/logs?fileId=production-api&search=jwt"
-  ```
-- **`GET /api/logs/stream`** (Server-Sent Events untuk Live Tailing `tail -f`)
-  ```bash
-  curl -N http://localhost:8080/api/logs/stream
-  ```
-  *Akan terus menerima event log baru secara streaming.*
-- **`GET /api/logs/download`** (Unduh file `.log` mentah)
-  ```bash
-  curl http://localhost:8080/api/logs/download?fileId=production-api -o production.log
-  ```
-
-### 5. Telemetri & Ingest Metrics
-- **`GET /api/metrics`**
-  ```bash
-  curl http://localhost:8080/api/metrics
-  ```
-- **`GET /api/settings`** & **`POST /api/settings`**
-  ```bash
-  curl http://localhost:8080/api/settings
-  ```
-
-### 6. Healthcheck
-- **`GET /health`**
-  ```bash
-  curl http://localhost:8080/health
-  ```
-
----
-
-## 🔗 Menghubungkan Frontend ke Backend Go
-
-Di sisi frontend React, telah disediakan kelas layanan `src/services/api.ts`.
-Secara default, jika backend Go aktif di `http://localhost:8080`, frontend dapat langsung melakukan fetch ke endpoint tersebut. Jika backend Go belum dinyalakan, frontend memiliki fallback cerdas sehingga UI tetap berfungsi interaktif tanpa error.
-
-Variabel environment (opsional di `.env`):
-```env
-VITE_API_BASE_URL="http://localhost:8080"
-```
+The frontend container contains only the static build. The Go container owns the shared database volume. Do not run multiple Go replicas against the same SQLite file; move persistence to a server database before horizontal scaling.

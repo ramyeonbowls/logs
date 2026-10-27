@@ -158,6 +158,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
         authMethod,
         password,
         privateKey,
+        passphrase,
         tunnelToken,
         remotePath
       };
@@ -190,9 +191,7 @@ export const ConnectionSettingsModal: React.FC<ConnectionSettingsModalProps> = (
       name: connName || (type === 'local_folder' ? `Local Folder (${localPath})` : `${username}@${host}`),
       type,
       latencyMs: testResult?.latencyMs || (type === 'local_folder' ? 1 : 14),
-      isConnected: true,
-      status: 'connected',
-      statusMessage: testResult?.message || 'Ready'
+      isConnected: true
     };
 
     if (type === 'local_folder') {
