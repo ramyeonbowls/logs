@@ -192,15 +192,17 @@ export default function App() {
 
     return LogPulseAPI.subscribeLogStream(
       currentFile.path,
-      (newLine: LogLine) => {
+      (newLines: LogLine[]) => {
         setFiles(prevFiles =>
           prevFiles.map(file => {
             if (file.path !== currentFile.path) return file;
 
+            const lines = [...file.lines, ...newLines];
             return {
               ...file,
-              lineCount: file.lineCount + 1,
-              lines: [...file.lines, newLine]
+              lineCount: file.lineCount + newLines.length,
+              // Keep the active tail bounded so long sessions cannot grow memory forever.
+              lines: lines.length > 5000 ? lines.slice(-5000) : lines
             };
           })
         );
@@ -275,6 +277,17 @@ export default function App() {
 
   // Filtered lines based on search and level filter
   const filteredLines = useMemo(() => {
+    const query = searchQuery.trim();
+    const normalizedQuery = query.toLocaleLowerCase();
+    let expression: RegExp | null = null;
+    if (query && isRegex) {
+      try {
+        expression = new RegExp(query, isCaseSensitive ? '' : 'i');
+      } catch {
+        expression = null;
+      }
+    }
+
     return currentFile.lines.filter(line => {
       // Level filter
       if (activeLevelFilter && line.level !== activeLevelFilter) {
@@ -282,24 +295,20 @@ export default function App() {
       }
 
       // Search query
-      if (!searchQuery.trim()) return true;
+      if (!query) return true;
 
       const fullText = `${line.lineNumber} ${line.timestamp} ${line.level} ${line.service} ${line.traceId || ''} ${line.message} ${line.stackTrace?.join(' ') || ''}`;
 
-      if (isRegex) {
-        try {
-          const rx = new RegExp(searchQuery, isCaseSensitive ? '' : 'i');
-          return rx.test(fullText);
-        } catch {
-          return fullText.toLowerCase().includes(searchQuery.toLowerCase());
-        }
+      if (expression) {
+        expression.lastIndex = 0;
+        return expression.test(fullText);
       }
 
       if (isCaseSensitive) {
-        return fullText.includes(searchQuery);
+        return fullText.includes(query);
       }
 
-      return fullText.toLowerCase().includes(searchQuery.toLowerCase());
+      return fullText.toLocaleLowerCase().includes(normalizedQuery);
     });
   }, [currentFile.lines, activeLevelFilter, searchQuery, isCaseSensitive, isRegex]);
 

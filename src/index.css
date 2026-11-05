@@ -244,6 +244,115 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
 }
 .file-tree-file.is-selected svg { color: #29292c !important; }
+.workspace-sidebar {
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(255,255,255,.9), transparent 42%),
+    linear-gradient(160deg, rgba(248,248,250,.92), rgba(235,235,239,.9)) !important;
+  color: #29292c !important;
+}
+.file-tree-header {
+  min-height: 2.65rem;
+  background: rgba(255,255,255,.56) !important;
+}
+.file-tree-header > div { min-width: 0; }
+.file-tree-header > div span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tree-total, .file-tree-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.15rem;
+  padding-inline: .35rem;
+  border: 1px solid rgba(40,40,44,.09);
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  color: #77777c !important;
+  font-size: 9px;
+  line-height: 1;
+}
+.file-tree-total { margin-left: .15rem; }
+.file-tree-list {
+  padding: .6rem .5rem !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(247,247,249,.34));
+  scrollbar-color: rgba(65,65,72,.2) transparent;
+  scrollbar-width: thin;
+}
+.file-tree-node { margin-block: 2px !important; }
+.file-tree-folder, .file-tree-file {
+  min-height: 2.45rem !important;
+  padding-block: .48rem !important;
+  border: 1px solid transparent;
+  border-radius: .65rem !important;
+  color: #525258 !important;
+  font-family: inherit;
+  font-size: .75rem !important;
+  transition: background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease;
+}
+.file-tree-folder:focus-visible, .file-tree-file:focus-visible {
+  outline: 2px solid rgba(30,30,34,.4);
+  outline-offset: 1px;
+}
+.file-tree-folder:hover, .file-tree-file:hover {
+  background: rgba(255,255,255,.78) !important;
+  border-color: rgba(35,35,40,.07);
+  box-shadow: 0 2px 8px rgba(20,20,24,.045);
+  color: #202024 !important;
+}
+.file-tree-folder.is-open {
+  background: rgba(255,255,255,.44);
+  color: #343438 !important;
+}
+.file-tree-folder .font-semibold { color: #343438 !important; }
+.file-tree-chevron { display: inline-flex; width: 1rem; align-items: center; justify-content: center; }
+.file-tree-folder svg { transition: transform .14s ease, color .14s ease; }
+.file-tree-folder .text-cyan-400, .file-tree-folder .text-cyan-500\/80 { color: #55555b !important; }
+.file-tree-guide { background: linear-gradient(rgba(55,55,60,.15), rgba(55,55,60,.035)) !important; }
+.file-tree-file > div:first-child { min-width: 0; }
+.file-tree-file > div:first-child svg { color: #77777d !important; }
+.file-tree-file > div:last-child { padding-left: .35rem; }
+.file-tree-file.is-selected {
+  background: linear-gradient(100deg, rgba(35,35,40,.105), rgba(255,255,255,.68)) !important;
+  border: 1px solid rgba(35,35,40,.12) !important;
+  border-left: 3px solid #303035 !important;
+  color: #19191c !important;
+  box-shadow: 0 3px 10px rgba(20,20,24,.06), inset 0 1px 0 rgba(255,255,255,.92);
+}
+.file-tree-file.is-selected svg { color: #303035 !important; }
+.file-tree-empty {
+  margin: .5rem .25rem;
+  padding: 1.25rem .75rem !important;
+  border: 1px dashed rgba(35,35,40,.16);
+  border-radius: .8rem;
+  background: rgba(255,255,255,.35);
+  color: #77777c !important;
+  line-height: 1.5;
+}
+.file-tree-filters {
+  padding: .6rem .55rem !important;
+  background: rgba(255,255,255,.5) !important;
+}
+.file-tree-filters label {
+  min-height: 2.25rem;
+  border-radius: .7rem !important;
+  background: rgba(255,255,255,.76) !important;
+  border-color: rgba(35,35,40,.09) !important;
+  box-shadow: inset 0 1px 2px rgba(20,20,24,.025);
+}
+.file-tree-filters input { color: #27272b !important; }
+.file-tree-filters input::placeholder { color: #929298 !important; }
+.file-tree-filters select {
+  min-height: 2.25rem;
+  border-radius: .7rem !important;
+  background: rgba(255,255,255,.76) !important;
+  border-color: rgba(35,35,40,.09) !important;
+  color: #55555a !important;
+  font-size: 10px !important;
+}
+.file-tree-filters select option { color: #252529; background: white; }
 .workspace-stream > div:first-child {
   height: 2.25rem;
   background: rgba(255,255,255,.62) !important;
@@ -359,4 +468,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .status-level-filters { gap: .3rem; }
   .status-level-filters > button:not(:last-child) { font-size: 9px; padding-inline: .25rem; }
   .workspace-stream > div:first-child { padding-inline: .65rem; }
+  .file-tree-folder, .file-tree-file { min-height: 2.7rem !important; }
 }

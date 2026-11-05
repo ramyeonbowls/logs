@@ -252,11 +252,22 @@ export class LogPulseAPI {
   // 6. SSE Real-time Tailing Stream (TAIL -F)
   static subscribeLogStream(
     filePath: string,
-    onLog: (line: LogLine) => void,
+    onLogs: (lines: LogLine[]) => void,
     onStatusChange?: (connected: boolean) => void
   ): () => void {
     try {
       const eventSource = new EventSource(`${API_BASE}/api/logs/stream?path=${encodeURIComponent(filePath)}`, { withCredentials: true });
+      let pendingLogs: LogLine[] = [];
+      let flushTimer: ReturnType<typeof setTimeout> | undefined;
+
+      const flushLogs = () => {
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = undefined;
+        if (pendingLogs.length === 0) return;
+        const batch = pendingLogs;
+        pendingLogs = [];
+        onLogs(batch);
+      };
 
       eventSource.onopen = () => {
         onStatusChange?.(true);
@@ -273,13 +284,15 @@ export class LogPulseAPI {
       eventSource.addEventListener('log', (event) => {
         try {
           const logLine: LogLine = JSON.parse(event.data);
-          onLog(logLine);
+          pendingLogs.push(logLine);
+          if (!flushTimer) flushTimer = setTimeout(flushLogs, 100);
         } catch (e) {
           console.error('SSE JSON parse error:', e);
         }
       });
 
       return () => {
+        flushLogs();
         eventSource.close();
       };
     } catch {

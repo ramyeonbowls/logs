@@ -25,10 +25,11 @@ const sessionCookie = "logpulse_session"
 const sessionTTL = 12 * time.Hour
 
 type App struct {
-	db           *sql.DB
-	logger       *slog.Logger
-	loginMu      sync.Mutex
-	loginFailures map[string]loginFailure
+	db             *sql.DB
+	logger         *slog.Logger
+	loginMu        sync.Mutex
+	loginFailures  map[string]loginFailure
+	requestMetrics *requestMetrics
 }
 
 type loginFailure struct {
@@ -68,7 +69,7 @@ func New(logger *slog.Logger) (*App, error) {
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(0)
-	a := &App{db: db, logger: logger, loginFailures: make(map[string]loginFailure)}
+	a := &App{db: db, logger: logger, loginFailures: make(map[string]loginFailure), requestMetrics: newRequestMetrics()}
 	if err := a.initDB(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -205,6 +206,7 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /metrics", a.prometheusMetrics)
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.Handle("POST /api/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/auth/me", a.auth(http.HandlerFunc(a.me)))
@@ -277,17 +279,25 @@ func (a *App) cors(next http.Handler) http.Handler {
 func (a *App) requestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		if r.URL.Path == "/metrics" || r.URL.Path == "/api/logs/stream" {
+			next.ServeHTTP(w, r)
+			a.logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
+			return
+		}
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/auth/login" && r.URL.Path != "/api/auth/logout" {
 			origin := r.Header.Get("Origin")
 			if origin != "" && r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-				jsonError(w, http.StatusForbidden, "Cross-site request rejected.")
+				jsonError(recorder, http.StatusForbidden, "Cross-site request rejected.")
+				a.requestMetrics.observe(r.Method, metricRoute(r.URL.Path), recorder.status, time.Since(start))
 				return
 			}
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(recorder, r)
+		a.requestMetrics.observe(r.Method, metricRoute(r.URL.Path), recorder.status, time.Since(start))
 		a.logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
 }
@@ -383,7 +393,9 @@ func requestClientIP(r *http.Request) string {
 	if value := strings.TrimSpace(forwarded[len(forwarded)-1]); value != "" {
 		return value
 	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil { return host }
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
 	return r.RemoteAddr
 }
 
@@ -391,10 +403,17 @@ func (a *App) loginRetryAfter(ip string) time.Duration {
 	a.loginMu.Lock()
 	defer a.loginMu.Unlock()
 	failure, ok := a.loginFailures[ip]
-	if !ok { return 0 }
+	if !ok {
+		return 0
+	}
 	now := time.Now()
-	if now.Before(failure.blockedTill) { return time.Until(failure.blockedTill) }
-	if now.Sub(failure.windowStart) >= 15*time.Minute { delete(a.loginFailures, ip); return 0 }
+	if now.Before(failure.blockedTill) {
+		return time.Until(failure.blockedTill)
+	}
+	if now.Sub(failure.windowStart) >= 15*time.Minute {
+		delete(a.loginFailures, ip)
+		return 0
+	}
 	return 0
 }
 
@@ -403,12 +422,20 @@ func (a *App) recordLoginFailure(ip string) {
 	defer a.loginMu.Unlock()
 	now := time.Now()
 	failure := a.loginFailures[ip]
-	if now.Sub(failure.windowStart) >= 15*time.Minute { failure = loginFailure{windowStart: now} }
+	if now.Sub(failure.windowStart) >= 15*time.Minute {
+		failure = loginFailure{windowStart: now}
+	}
 	failure.count++
-	if failure.count >= 8 { failure.blockedTill = now.Add(15 * time.Minute) }
+	if failure.count >= 8 {
+		failure.blockedTill = now.Add(15 * time.Minute)
+	}
 	a.loginFailures[ip] = failure
 	if len(a.loginFailures) > 2048 {
-		for key, item := range a.loginFailures { if now.Sub(item.windowStart) > 15*time.Minute { delete(a.loginFailures, key) } }
+		for key, item := range a.loginFailures {
+			if now.Sub(item.windowStart) > 15*time.Minute {
+				delete(a.loginFailures, key)
+			}
+		}
 	}
 }
 

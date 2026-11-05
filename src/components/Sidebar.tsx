@@ -74,6 +74,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return filterNodes(treeState);
   }, [treeState, treeSearch, sortOrder]);
 
+  const visibleFileCount = useMemo(() => {
+    const countFiles = (nodes: FileTreeNode[]): number => nodes.reduce((count, node) =>
+      count + (node.type === 'file' ? 1 : countFiles(node.children || [])), 0);
+    return countFiles(visibleTree);
+  }, [visibleTree]);
+
   // Toggle folder open/closed
   const toggleFolder = (nodeId: string) => {
     const updateNodes = (nodes: FileTreeNode[]): FileTreeNode[] => {
@@ -120,14 +126,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isFolder ? (
             /* Folder Item */
             <div>
-              <div
+              <button
+                type="button"
                 onClick={() => toggleFolder(node.id)}
-                title={node.modifiedAt ? `Updated ${new Date(node.modifiedAt).toLocaleString()}` : undefined}
+                aria-expanded={Boolean(node.isOpen)}
+                title={node.path}
                 style={{ paddingLeft: `${depth * 14 + 8}px` }}
-                className="file-tree-folder flex items-center justify-between py-1.5 pr-2 rounded hover:bg-[#121c2d] text-slate-300 hover:text-white cursor-pointer group transition-colors"
+                className={`file-tree-folder w-full flex items-center justify-between py-1.5 pr-2 rounded hover:bg-[#121c2d] text-slate-300 hover:text-white cursor-pointer group transition-colors text-left ${node.isOpen ? 'is-open' : ''}`}
               >
                 <div className="flex items-center gap-1.5 truncate">
-                  <span className="text-slate-500 group-hover:text-slate-300">
+                  <span className="file-tree-chevron text-slate-500 group-hover:text-slate-300">
                     {node.isOpen ? (
                       <ChevronDown className="w-3.5 h-3.5" />
                     ) : (
@@ -144,18 +152,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </span>
                 </div>
                 {node.children && (
-                  <span className="text-[10px] text-slate-600 font-mono">
+                  <span className="file-tree-count text-[10px] text-slate-600 font-mono">
                     {node.children.length}
                   </span>
                 )}
-              </div>
+              </button>
 
               {/* Children */}
               {node.isOpen && node.children && (
                 <div className="relative">
                   <div 
                     style={{ left: `${depth * 14 + 14}px` }} 
-                    className="absolute top-0 bottom-0 w-[1px] bg-[#1a2538]" 
+                    className="file-tree-guide absolute top-0 bottom-0 w-[1px] bg-[#1a2538]"
                   />
                   {renderTree(node.children, depth + 1)}
                 </div>
@@ -165,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             /* File Item */
             <div
               onClick={() => handleFileClick(node)}
-              title={node.modifiedAt ? `Updated ${new Date(node.modifiedAt).toLocaleString()}` : undefined}
+              title={node.path}
               style={{ paddingLeft: `${depth * 14 + 16}px` }}
               className={`file-tree-file flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-colors ${
                 isSelected
@@ -287,6 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">
             <FolderTree className="w-3.5 h-3.5 text-cyan-400" />
             <span>{isLocal ? 'LOCAL FILE TREE' : 'REMOTE FILE TREE'}</span>
+            <span className="file-tree-total">{visibleFileCount}</span>
           </div>
 
           <button
@@ -322,11 +331,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Scrollable Tree View */}
-        <div className="file-tree-list flex-1 overflow-y-auto p-1.5 space-y-0.5">
+        <div className="file-tree-list flex-1 overflow-y-auto p-1.5 space-y-0.5" role="region" aria-label="Log files">
           {visibleTree.length > 0 ? (
             renderTree(visibleTree)
           ) : (
-            <div className="p-4 text-center text-slate-500 font-mono text-[11px]">
+            <div className="file-tree-empty p-2 text-center text-slate-500 font-mono text-[11px]">
               {treeSearch ? 'No matching files.' : 'No files found on this connection.'}
             </div>
           )}
