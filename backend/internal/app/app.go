@@ -25,11 +25,10 @@ const sessionCookie = "logpulse_session"
 const sessionTTL = 12 * time.Hour
 
 type App struct {
-	db             *sql.DB
-	logger         *slog.Logger
-	loginMu        sync.Mutex
-	loginFailures  map[string]loginFailure
-	requestMetrics *requestMetrics
+	db            *sql.DB
+	logger        *slog.Logger
+	loginMu       sync.Mutex
+	loginFailures map[string]loginFailure
 }
 
 type loginFailure struct {
@@ -69,7 +68,7 @@ func New(logger *slog.Logger) (*App, error) {
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(0)
-	a := &App{db: db, logger: logger, loginFailures: make(map[string]loginFailure), requestMetrics: newRequestMetrics()}
+	a := &App{db: db, logger: logger, loginFailures: make(map[string]loginFailure)}
 	if err := a.initDB(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -206,7 +205,6 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("GET /api/health", a.health)
-	mux.HandleFunc("GET /metrics", a.prometheusMetrics)
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.Handle("POST /api/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/auth/me", a.auth(http.HandlerFunc(a.me)))
@@ -279,25 +277,22 @@ func (a *App) cors(next http.Handler) http.Handler {
 func (a *App) requestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		if r.URL.Path == "/metrics" || r.URL.Path == "/api/logs/stream" {
+		if r.URL.Path == "/api/logs/stream" {
 			next.ServeHTTP(w, r)
 			a.logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 			return
 		}
-		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/auth/login" && r.URL.Path != "/api/auth/logout" {
 			origin := r.Header.Get("Origin")
 			if origin != "" && r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-				jsonError(recorder, http.StatusForbidden, "Cross-site request rejected.")
-				a.requestMetrics.observe(r.Method, metricRoute(r.URL.Path), recorder.status, time.Since(start))
+				jsonError(w, http.StatusForbidden, "Cross-site request rejected.")
 				return
 			}
 		}
-		next.ServeHTTP(recorder, r)
-		a.requestMetrics.observe(r.Method, metricRoute(r.URL.Path), recorder.status, time.Since(start))
+		next.ServeHTTP(w, r)
 		a.logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
 }
